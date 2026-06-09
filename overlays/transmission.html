@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transmission Card — The Kevin Show</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="overlay-system.css">
+<style>
+  html, body { height:100%; }
+  body.ovl { display:flex; align-items:center; justify-content:center; padding:40px; }
+
+  .tx { width: 660px; position:relative; }
+
+  /* perforated teletype feed edge */
+  .tx .feed {
+    position:absolute; top:14px; bottom:14px; width:18px;
+    display:flex; flex-direction:column; justify-content:space-between;
+    z-index:5;
+  }
+  .tx .feed.left { left:6px; } .tx .feed.right { right:6px; }
+  .tx .feed i {
+    width:9px; height:9px; border-radius:50%;
+    background:#060402; box-shadow: inset 0 1px 2px rgba(0,0,0,.9), 0 0 0 1px rgba(255,176,0,.12);
+    margin:0 auto;
+  }
+
+  .tx-head {
+    display:flex; align-items:center; gap:12px; padding: 4px 16px 0 16px;
+  }
+  .tx-head .sig {
+    display:flex; align-items:center; gap:9px;
+    font-family:var(--font-display); font-size:16px; letter-spacing:.1em;
+    color:var(--amber); text-shadow:var(--glow-amber-soft);
+  }
+  .tx-head .sig .led { width:11px; height:11px; animation: glow-pulse 1.2s ease-in-out infinite; }
+  .tx-head .place {
+    margin-left:auto; font-family:var(--font-display); font-size:16px;
+    color:var(--amber-bright); text-shadow:var(--glow-amber); letter-spacing:.06em;
+  }
+
+  .tx-meta {
+    display:flex; gap:22px; padding: 12px 30px 0;
+    font-family:var(--font-label); font-size:12px; letter-spacing:.16em; color:var(--amber-dim);
+  }
+  .tx-meta b { color:var(--amber); font-weight:400; }
+
+  .tx-body {
+    margin: 14px 30px 4px; padding: 16px 18px;
+    background: rgba(255,176,0,.03);
+    border-left: 3px solid var(--amber-deep);
+    border-radius: 3px;
+    min-height: 150px;
+  }
+  .tx-body .line {
+    font-family: var(--font-label);
+    font-size: 19px; line-height: 1.65;
+    color: var(--amber);
+    text-shadow: 0 0 6px rgba(255,176,0,.25);
+    white-space: pre-wrap;
+    margin:0;
+  }
+  .caret {
+    display:inline-block; width:11px; height:21px;
+    background:var(--amber-bright); box-shadow:var(--glow-amber);
+    vertical-align:-3px; margin-left:2px;
+    animation: caret-blink 1s steps(1) infinite;
+  }
+
+  .tx-foot {
+    display:flex; align-items:center; gap:14px; padding: 6px 30px 6px;
+    font-family:var(--font-label); font-size:12px; letter-spacing:.18em; color:var(--amber-dim);
+  }
+  .bars { display:flex; gap:3px; align-items:flex-end; height:16px; }
+  .bars i { width:5px; background:var(--amber); border-radius:1px; box-shadow:0 0 5px rgba(255,176,0,.5); }
+  .bars i:nth-child(1){height:5px}.bars i:nth-child(2){height:8px}.bars i:nth-child(3){height:11px}.bars i:nth-child(4){height:14px}.bars i:nth-child(5){height:16px;background:#3a2c10;box-shadow:none}
+  .tx-foot .status { margin-left:auto; color:var(--amber); }
+
+  /* idle vs active */
+  .tx { transition: opacity .5s ease, transform .5s cubic-bezier(.2,.9,.3,1); }
+  body.idle .tx { opacity:0; transform: translateY(24px) scale(.98); pointer-events:none; }
+
+  .ctl {
+    position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:50;
+    display:flex; gap:10px;
+  }
+  .ctl button {
+    font-family:var(--font-label); font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--amber-dim); background:rgba(20,16,8,.85); border:1px solid var(--amber-deep);
+    border-radius:6px; padding:7px 12px; cursor:pointer;
+  }
+  body.embed .ctl { display:none; }
+</style>
+</head>
+<body class="ovl crt-flicker" data-screen-label="Transmission Card">
+  <div class="ctl">
+    <button onclick="play()">▶ Receive</button>
+    <button onclick="toggleIdle()">Idle / Active</button>
+  </div>
+
+  <div class="tx panel">
+    <span class="panel-glass"></span>
+    <span class="rivets"><i></i><i></i><i></i><i></i></span>
+    <span class="feed left"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+    <span class="feed right"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+
+    <div class="panel-inner">
+      <div class="tx-head">
+        <span class="sig"><span class="led"></span><span id="sig">INCOMING TRANSMISSION</span></span>
+        <span class="place" id="place">— CADILLAC RANCH</span>
+      </div>
+      <div class="tx-meta">
+        <span id="coordmeta">35.1872°N · 101.9871°W</span>
+        <span id="legmeta">LEG <b>01</b> · AMARILLO TX</span>
+        <span id="timemeta">06·03 · <b>14:22 CDT</b></span>
+      </div>
+      <div class="rule" style="margin:10px 30px 0"></div>
+      <div class="tx-body">
+        <p class="line" id="line"></p>
+      </div>
+      <div class="tx-foot">
+        <span>SIGNAL</span>
+        <span class="bars"><i></i><i></i><i></i><i></i><i></i></span>
+        <span>· DECODING ROADSIDE ARCHIVE</span>
+        <span class="status" id="status">▮ RECEIVING</span>
+      </div>
+    </div>
+  </div>
+
+<script src="config/overlay-config.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/telemetry-client.js"></script>
+<script>
+  const client = window.R66;
+  const lineEl = document.getElementById('line');
+  const statusEl = document.getElementById('status');
+  const $ = (id) => document.getElementById(id);
+  let typing = null;
+  let message = '';
+
+  function play(){
+    document.body.classList.remove('idle');
+    clearInterval(typing);
+    lineEl.textContent = '';
+    statusEl.textContent = '▮ RECEIVING';
+    statusEl.style.color = 'var(--amber)';
+    const caret = document.createElement('span'); caret.className = 'caret';
+    let i = 0;
+    setTimeout(()=>{
+      lineEl.appendChild(caret);
+      typing = setInterval(()=>{
+        if (i < message.length){
+          caret.insertAdjacentText('beforebegin', message[i]);
+          i++;
+        } else {
+          clearInterval(typing);
+          statusEl.textContent = '✓ TRANSCRIBED';
+          statusEl.style.color = 'var(--amber-bright)';
+          setTimeout(()=>caret.remove(), 1500);
+        }
+      }, 22);
+    }, 520);
+  }
+
+  // populate the card from a geofence transmission, then type out the lore
+  function receive(t){
+    if (!t) return;
+    message = t.body || '';
+    if (t.sig) $('sig').textContent = t.sig;
+    if (t.place) $('place').textContent = '— ' + t.place;
+    if (t.latText && t.lngText) $('coordmeta').textContent = `${t.latText} · ${t.lngText}`;
+    if (t.legLabel) $('legmeta').innerHTML = t.legLabel.replace(/LEG (\d+)/, 'LEG <b>$1</b>');
+    if (t.timeText) $('timemeta').innerHTML = t.timeText.replace(/(\d{1,2}:\d{2}[^<]*)$/, '<b>$1</b>');
+    play();
+  }
+
+  function toggleIdle(){ document.body.classList.toggle('idle'); }
+  // preview buttons
+  window.play = () => { const t = client.last('transmission'); if (t) receive(t); else if (message) play(); };
+  window.toggleIdle = toggleIdle;
+
+  client.on('transmission', receive);
+  client.on('transmission:clear', () => document.body.classList.add('idle'));
+
+  // start hidden; a transmission slides it in (don't re-type stale lore on a reconnect)
+  document.body.classList.add('idle');
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+{
+  "mode": "demo",
+
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8787,
+    "heartbeatMs": 10000,
+    "overlaysDir": "../overlays"
+  },
+
+  "units": {
+    "distance": "mi",
+    "speed": "mph",
+    "temp": "F",
+    "elevation": "ft"
+  },
+
+  "vehicle": {
+    "carId": 1,
+    "name": "Kevin's Tesla"
+  },
+
+  "trip": {
+    "name": "The Kevin Show - Route 66 Loop",
+    "totalLegs": 6,
+    "timezone": "America/Chicago",
+    "landmarksPath": "../planning/landmarks.json",
+    "legsPath": "../config/legs.json",
+    "odometerBaselineKm": null,
+    "elevationBaselineM": null,
+    "statesPlanned": ["MO", "KS", "OK", "TX", "NM", "AZ"],
+    "avgIceTankRangeMi": 29
+  },
+
+  "thresholds": {
+    "lowBatteryPct": 15,
+    "criticalBatteryPct": 10,
+    "lowBatteryRearmPct": 3,
+    "speedSpikeMph": 25,
+    "speedMaxPlausibleMph": 110
+  },
+
+  "mqtt": {
+    "url": "mqtt://teslamate.lan:1883",
+    "username": null,
+    "password": null,
+    "topicBase": "teslamate/cars/1",
+    "reconnectMs": 4000
+  },
+
+  "postgres": {
+    "host": "teslamate.lan",
+    "port": 5432,
+    "database": "teslamate",
+    "user": "teslamate",
+    "password": "CHANGE_ME",
+    "ssl": false,
+    "pollIntervalSec": 60
+  },
+
+  "demo": {
+    "tickMs": 250,
+    "timeCompression": 120,
+    "loop": true,
+    "standbyDwellSec": 8,
+    "startLeg": 1,
+    "cruiseMph": 64,
+    "startBatteryPct": 92
+  }
+}

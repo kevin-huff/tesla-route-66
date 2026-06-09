@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mission Map — The Kevin Show</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="overlay-system.css">
+<style>
+  html, body { height: 100%; }
+  body.ovl { display:flex; align-items:center; justify-content:center; padding:40px; }
+  .map { width: 1060px; }
+  .map-head {
+    display:flex; align-items:center; gap:14px; margin-bottom: 6px;
+  }
+  .map-head .title { font-family:var(--font-display); font-size:20px; color:var(--amber); letter-spacing:.1em; text-shadow:var(--glow-amber-soft); }
+  .map-head .sub { font-family:var(--font-label); font-size:13px; letter-spacing:.22em; color:var(--amber-dim); }
+  .map-head .badge {
+    margin-left:auto; font-family:var(--font-label); font-size:12px; letter-spacing:.18em;
+    color:var(--amber-dim); border:1px solid var(--amber-deep); border-radius:5px; padding:5px 10px;
+    display:flex; align-items:center; gap:8px; white-space:nowrap;
+  }
+  svg { display:block; width:100%; height:auto; }
+
+  /* route legs */
+  .leg { fill:none; stroke-linecap:round; }
+  .leg.done   { stroke:var(--amber); stroke-width:5; filter:drop-shadow(0 0 5px rgba(255,176,0,.6)); }
+  .leg.future { stroke:#5a3e00; stroke-width:4; stroke-dasharray:2 14; opacity:.85; }
+  .leg.current{ stroke:var(--amber-bright); stroke-width:6; filter:drop-shadow(0 0 10px var(--amber-bright)); }
+  .leg.current { stroke-dasharray: 26 18; animation: dash-run 1.4s linear infinite; }
+  @keyframes dash-run { to { stroke-dashoffset:-44; } }
+
+  .node-dot { fill:#0a0806; stroke:var(--amber); stroke-width:3; }
+  .node-dot.done { fill:var(--amber); }
+  .node-dot.future { stroke:#6a4a00; }
+  .node-core { fill:var(--amber-bright); }
+
+  .node-label { font-family:var(--font-label); fill:var(--amber); font-size:15px; letter-spacing:.12em; text-anchor:middle; }
+  .node-state { font-family:var(--font-label); fill:var(--amber-dim); font-size:11px; letter-spacing:.18em; text-anchor:middle; }
+  .node-label.dim { fill:var(--amber-dim); }
+
+  /* STANDBY hex node */
+  .standby-hex { fill:#141008; stroke:var(--amber); stroke-width:3; filter:drop-shadow(0 0 8px rgba(255,176,0,.5)); }
+  .standby-ping { fill:none; stroke:var(--amber-bright); stroke-width:2; transform-origin:center; }
+  .standby-label { font-family:var(--font-display); fill:var(--amber-bright); font-size:13px; letter-spacing:.14em; text-anchor:middle; text-shadow:var(--glow-amber); }
+
+  /* vehicle marker */
+  .veh { fill:var(--amber-bright); filter:drop-shadow(0 0 8px var(--amber-bright)); }
+  .veh-ping { fill:none; stroke:var(--amber-bright); stroke-width:2; }
+  #veh { transition: transform 1s linear; }
+
+  /* graticule */
+  .grat { stroke:rgba(255,176,0,.06); stroke-width:1; }
+  .grat-strong { stroke:rgba(255,176,0,.1); stroke-width:1; }
+
+  /* readout footer */
+  .map-foot {
+    margin-top:8px; display:grid; grid-template-columns: 1fr 1px 1.4fr 1px 1.1fr;
+    align-items:center; gap:0;
+  }
+  .fcell { padding: 6px 22px; }
+  .fcell .label { font-size:11px; letter-spacing:.2em; margin-bottom:7px; }
+  .fcell .val { font-family:var(--font-display); font-size:24px; color:var(--amber-bright); text-shadow:var(--glow-amber-soft); letter-spacing:.04em; }
+  .fcell .val small { color:var(--amber-dim); font-size:15px; }
+  .fcell .num { font-family:var(--font-num7); font-size:30px; color:var(--amber-bright); text-shadow:var(--glow-amber); }
+  .fcell .unit { font-family:var(--font-display); font-size:14px; color:var(--amber-dim); margin-left:6px; }
+  .fdiv { width:1px; height:42px; background:linear-gradient(180deg,transparent,var(--amber-deep),transparent); }
+</style>
+</head>
+<body class="ovl crt-flicker" data-screen-label="Mission Map">
+  <div class="map panel">
+    <span class="panel-glass"></span>
+    <span class="rivets"><i></i><i></i><i></i><i></i></span>
+    <div class="panel-inner">
+      <div class="map-head">
+        <span class="title">MISSION MAP</span>
+        <span class="sub">ROUTE 66 · SIX-LEG LOOP</span>
+        <span class="badge"><span class="led" style="width:9px;height:9px"></span> FLIGHT PLAN ACTIVE</span>
+      </div>
+
+      <svg viewBox="0 0 1000 560" role="img" aria-label="Route 66 six-leg loop map">
+        <defs>
+          <radialGradient id="vign" cx="50%" cy="42%" r="70%">
+            <stop offset="60%" stop-color="transparent"/>
+            <stop offset="100%" stop-color="rgba(0,0,0,.4)"/>
+          </radialGradient>
+        </defs>
+
+        <!-- graticule -->
+        <g>
+          <line class="grat" x1="0" y1="140" x2="1000" y2="140"/>
+          <line class="grat" x1="0" y1="280" x2="1000" y2="280"/>
+          <line class="grat" x1="0" y1="420" x2="1000" y2="420"/>
+          <line class="grat" x1="200" y1="0" x2="200" y2="560"/>
+          <line class="grat" x1="400" y1="0" x2="400" y2="560"/>
+          <line class="grat" x1="600" y1="0" x2="600" y2="560"/>
+          <line class="grat" x1="800" y1="0" x2="800" y2="560"/>
+        </g>
+
+        <!-- LEGS: SPR(868,139) AMA(528,262) FLG(136,262) MCP(120,391) ELP(340,471) GAR(736,403) -->
+        <!-- future legs first (under) -->
+        <path class="leg future" d="M120,391 L340,471" id="leg4"/>   <!-- L4 MCP->ELP -->
+        <path class="leg future" d="M340,471 L736,403" id="leg5"/>   <!-- L5 ELP->GAR -->
+        <path class="leg future" d="M736,403 L868,139" id="leg6"/>   <!-- L6 GAR->SPR -->
+        <!-- done legs -->
+        <path class="leg done" d="M868,139 L528,262" id="leg1"/>     <!-- L1 SPR->AMA -->
+        <path class="leg done" d="M528,262 L136,262" id="leg2"/>     <!-- L2 AMA->FLG -->
+        <!-- current leg L3 FLG->MCP -->
+        <path class="leg current" d="M136,262 L120,391" id="leg3"/>
+
+        <!-- nodes -->
+        <!-- SPR -->
+        <g>
+          <circle class="node-dot done" cx="868" cy="139" r="9"/>
+          <text class="node-label" x="868" y="120">SPRINGFIELD</text>
+          <text class="node-state" x="868" y="106">START · END</text>
+        </g>
+        <!-- AMA -->
+        <g>
+          <circle class="node-dot done" cx="528" cy="262" r="9" id="dotAMA"/>
+          <text class="node-label" x="528" y="240">AMARILLO</text>
+        </g>
+        <!-- FLG -->
+        <g>
+          <circle class="node-dot done" cx="136" cy="262" r="9" id="dotFLG"/>
+          <text class="node-label" x="146" y="240">FLAGSTAFF</text>
+        </g>
+        <!-- ELP -->
+        <g>
+          <circle class="node-dot future" cx="340" cy="471" r="8" id="dotELP"/>
+          <text class="node-label dim" x="340" y="500">EL PASO</text>
+        </g>
+        <!-- GAR -->
+        <g>
+          <circle class="node-dot future" cx="736" cy="403" r="8" id="dotGAR"/>
+          <text class="node-label dim" x="736" y="432">GARLAND</text>
+        </g>
+
+        <!-- MARICOPA STANDBY node -->
+        <g transform="translate(120,391)">
+          <circle class="standby-ping" cx="0" cy="0" r="16">
+            <animate attributeName="r" values="16;34" dur="2.2s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.8;0" dur="2.2s" repeatCount="indefinite"/>
+          </circle>
+          <polygon class="standby-hex" points="0,-15 13,-7.5 13,7.5 0,15 -13,7.5 -13,-7.5"/>
+          <!-- pause glyph -->
+          <rect x="-5" y="-6" width="3.5" height="12" fill="var(--amber-bright)"/>
+          <rect x="1.5" y="-6" width="3.5" height="12" fill="var(--amber-bright)"/>
+          <text class="standby-label" x="0" y="40">STANDBY · 1 WEEK</text>
+          <text class="node-label" x="0" y="58" style="fill:var(--amber-dim)">MARICOPA, AZ</text>
+        </g>
+
+        <!-- vehicle marker on current leg ~62% -->
+        <g id="veh" transform="translate(126,342)">
+          <circle class="veh-ping" cx="0" cy="0" r="9">
+            <animate attributeName="r" values="9;22" dur="1.6s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.9;0" dur="1.6s" repeatCount="indefinite"/>
+          </circle>
+          <circle class="veh" cx="0" cy="0" r="6"/>
+        </g>
+
+        <rect x="0" y="0" width="1000" height="560" fill="url(#vign)" pointer-events="none"/>
+      </svg>
+
+      <div class="rule" style="margin:4px 0 2px"></div>
+      <div class="map-foot">
+        <div class="fcell">
+          <div class="label">CURRENT LEG</div>
+          <div class="val">LEG <span class="num" id="curleg" style="font-size:26px">03</span><small>/06</small></div>
+        </div>
+        <div class="fdiv"></div>
+        <div class="fcell">
+          <div class="label">NEXT WAYPOINT</div>
+          <div class="val" id="nextwp">MARICOPA, AZ <small>· STANDBY</small></div>
+        </div>
+        <div class="fdiv"></div>
+        <div class="fcell" style="display:flex; gap:26px;">
+          <div>
+            <div class="label">DIST TO NEXT</div>
+            <div><span class="num" id="dist">84</span><span class="unit">MI</span></div>
+          </div>
+          <div>
+            <div class="label">ETA</div>
+            <div><span class="num" id="eta">1:32</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="config/overlay-config.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/telemetry-client.js"></script>
+<script>
+  const client = window.R66;
+  const $ = (id) => document.getElementById(id);
+  // a node fills solid (done) when the leg that arrives at it completes
+  const NODE_BY_DONE_LEG = { 1: 'dotAMA', 2: 'dotFLG', 4: 'dotELP', 5: 'dotGAR' };
+
+  client.on('map', (m) => {
+    if (!m) return;
+    const status = m.legStatus || [];
+    for (let i = 1; i <= 6; i++) {
+      const el = $('leg' + i);
+      if (el) el.setAttribute('class', 'leg ' + (status[i - 1] || 'future'));
+    }
+    for (const [leg, id] of Object.entries(NODE_BY_DONE_LEG)) {
+      const dot = $(id);
+      if (dot) dot.setAttribute('class', 'node-dot ' + (status[Number(leg) - 1] === 'done' ? 'done' : 'future'));
+    }
+    const veh = $('veh');
+    if (veh && m.vehicle) veh.setAttribute('transform', `translate(${m.vehicle.svgX},${m.vehicle.svgY})`);
+
+    if (m.currentLeg != null) $('curleg').textContent = String(m.currentLeg).padStart(2, '0');
+    if (m.nextWaypoint) {
+      $('nextwp').innerHTML =
+        m.nextWaypoint.name + (m.nextWaypoint.tag ? ` <small>· ${m.nextWaypoint.tag}</small>` : '');
+    }
+    if (m.distToNextMi != null) $('dist').textContent = m.distToNextMi;
+    if (m.etaText) $('eta').textContent = m.etaText;
+  });
+</script>
+</body>
+</html>

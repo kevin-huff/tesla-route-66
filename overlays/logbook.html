@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logbook Counters — The Kevin Show</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="overlay-system.css">
+<style>
+  html, body { height:100%; }
+  body.ovl { display:flex; align-items:center; justify-content:center; padding:40px; }
+
+  .log {
+    width: 1500px;
+    /* punch-card clipped top-left corner */
+    clip-path: polygon(34px 0, 100% 0, 100% 100%, 0 100%, 0 34px);
+  }
+  .log-head {
+    display:flex; align-items:center; gap:14px; padding: 2px 26px 0;
+  }
+  .log-head .title { font-family:var(--font-display); font-size:16px; letter-spacing:.1em; color:var(--amber); text-shadow:var(--glow-amber-soft); }
+  .log-head .sub { font-family:var(--font-label); font-size:12px; letter-spacing:.22em; color:var(--amber-dim); }
+  .log-head .punchrow { margin-left:auto; display:flex; gap:6px; }
+  .log-head .punchrow i {
+    width:13px; height:8px; border-radius:1px; background:#060402;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.9), 0 0 0 1px rgba(255,176,0,.1);
+  }
+  .log-head .punchrow i.filled { background: var(--amber-deep); box-shadow:0 0 6px rgba(255,176,0,.3); }
+
+  .counters {
+    display:grid; grid-template-columns: repeat(5, 1fr);
+    margin-top: 14px;
+  }
+  .cell {
+    position:relative; padding: 6px 26px 10px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .cell + .cell::before {
+    content:""; position:absolute; left:0; top:8px; bottom:8px; width:1px;
+    background: linear-gradient(180deg, transparent, var(--amber-deep), transparent);
+  }
+  .cell .clabel {
+    font-family:var(--font-label); font-size:12px; letter-spacing:.16em; color:var(--amber-dim);
+    text-transform:uppercase; display:flex; align-items:center; gap:8px;
+  }
+  .cell .num {
+    font-family:var(--font-num7); font-size:50px; color:var(--amber-bright);
+    text-shadow:var(--glow-amber); letter-spacing:.01em; display:flex; align-items:baseline; gap:8px;
+  }
+  .seg-wrap { position:relative; }
+  .seg-wrap .ghost { position:absolute; inset:0; color:rgba(255,176,0,.07); }
+  .cell .unit { font-family:var(--font-display); font-size:15px; color:var(--amber-dim); letter-spacing:.04em; }
+
+  /* small chrome glyph badge per counter */
+  .glyph {
+    width:18px; height:18px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #cfcfcf, #6a6a6a 60%, #2a2a2a);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.7);
+    display:inline-block;
+  }
+  .glyph.on { background: radial-gradient(circle at 38% 35%, var(--amber-bright), var(--amber) 50%, #6a3d00); box-shadow: var(--glow-amber-soft); }
+
+  /* bypassed = struck-through "flex" tag */
+  .flex-tag {
+    font-family:var(--font-label); font-size:10px; letter-spacing:.14em;
+    color: var(--klaxon); border:1px solid var(--klaxon-dim); border-radius:3px;
+    padding:1px 5px; text-decoration: line-through; opacity:.85;
+  }
+</style>
+</head>
+<body class="ovl crt-flicker" data-screen-label="Logbook Counters">
+  <div class="log panel">
+    <span class="panel-glass"></span>
+    <span class="rivets"><i></i><i></i><i></i><i></i></span>
+
+    <div class="panel-inner">
+      <div class="log-head">
+        <span class="title">FLIGHT LOG</span>
+        <span class="sub">· CUMULATIVE · ALL SIX LEGS</span>
+        <span class="punchrow" id="punch"></span>
+      </div>
+
+      <div class="counters">
+        <div class="cell">
+          <div class="clabel"><span class="glyph on"></span>STATES CROSSED</div>
+          <div class="num"><span class="seg-wrap"><span class="ghost">88</span><span data-key="states" data-to="5">0</span></span></div>
+        </div>
+        <div class="cell">
+          <div class="clabel"><span class="glyph on"></span>SUPERCHARGERS DOCKED</div>
+          <div class="num"><span class="seg-wrap"><span class="ghost">88</span><span data-key="superchargers" data-to="18">0</span></span></div>
+        </div>
+        <div class="cell">
+          <div class="clabel"><span class="glyph on"></span>MILES LOGGED</div>
+          <div class="num"><span class="seg-wrap"><span class="ghost">8,888</span><span data-key="miles" data-to="1847" data-comma="1">0</span></span></div>
+        </div>
+        <div class="cell">
+          <div class="clabel"><span class="glyph"></span>STATIONS BYPASSED <span class="flex-tag">NO GAS</span></div>
+          <div class="num"><span class="seg-wrap"><span class="ghost">88</span><span data-key="stationsBypassed" data-to="63">0</span></span></div>
+        </div>
+        <div class="cell">
+          <div class="clabel"><span class="glyph on"></span>ELEVATION GAINED</div>
+          <div class="num"><span class="seg-wrap"><span class="ghost">88,888</span><span data-key="elevationFt" data-to="11200" data-comma="1">0</span></span><span class="unit">FT</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="config/overlay-config.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/telemetry-client.js"></script>
+<script>
+  const client = window.R66;
+  const punch = document.getElementById('punch');
+
+  function renderPunch(legsDone){
+    punch.innerHTML = '';
+    for (let i=0;i<6;i++){
+      const el = document.createElement('i');
+      if (i < legsDone) el.classList.add('filled');
+      punch.appendChild(el);
+    }
+  }
+  renderPunch(0);
+
+  function fmt(n, comma){ return comma ? Number(n).toLocaleString('en-US') : String(n); }
+
+  function countUp(el, to){
+    const comma = el.dataset.comma;
+    const from = Number(String(el.textContent).replace(/[^\d.-]/g,'')) || 0;
+    if (from === to){ el.textContent = fmt(to, comma); return; }
+    const token = (Number(el.dataset.tok)||0) + 1;
+    el.dataset.tok = token;
+    const dur = 700;
+    const start = performance.now();
+    function tick(now){
+      if (Number(el.dataset.tok) !== token) return;
+      const t = Math.min(1,(now-start)/dur);
+      const ease = 1-Math.pow(1-t,3);
+      el.textContent = fmt(Math.round(from + (to-from)*ease), comma);
+      if (t<1) requestAnimationFrame(tick); else el.textContent = fmt(to, comma);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  const KEYS = ['states','superchargers','miles','stationsBypassed','elevationFt'];
+  let first = true;
+  client.on('logbook', (d)=>{
+    if (!d) return;
+    KEYS.forEach((k, i)=>{
+      const el = document.querySelector(`[data-key="${k}"]`);
+      if (!el || d[k] == null) return;
+      el.dataset.to = d[k];
+      if (first) setTimeout(()=>countUp(el, +d[k]), 120 + i*100);
+      else countUp(el, +d[k]);
+    });
+    renderPunch(d.legsDone || 0);
+    first = false;
+  });
+</script>
+</body>
+</html>

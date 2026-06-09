@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Show Badge — The Kevin Show</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Kaushan+Script&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="overlay-system.css">
+<style>
+  html, body { height:100%; }
+  body.ovl { display:flex; align-items:center; justify-content:center; padding:40px; }
+  .badge-wrap { width:520px; text-align:center; position:relative; }
+
+  /* neon script wordmark */
+  .wordmark {
+    font-family: var(--font-script);
+    font-size: 78px; line-height:.9;
+    color: #fff3d8;
+    transform: rotate(-3deg);
+    text-shadow:
+      0 0 4px #fff,
+      0 0 10px var(--amber-bright),
+      0 0 22px var(--amber),
+      0 0 40px rgba(255,140,0,.7),
+      0 0 70px rgba(255,120,0,.4);
+    animation: neon-flicker 6s infinite;
+    margin-bottom: 2px;
+  }
+  @keyframes neon-flicker {
+    0%,100%,42%,46% { opacity:1; }
+    43% { opacity:.55; }
+    44% { opacity:.92; }
+    45% { opacity:.6; }
+  }
+
+  .shield-svg { width:300px; height:auto; display:block; margin:8px auto 0; }
+
+  .tag {
+    margin-top:14px;
+    font-family: var(--font-label);
+    font-size: 13px; letter-spacing:.34em; text-transform:uppercase;
+    color: var(--amber-dim);
+  }
+  .tag b { color: var(--amber); font-weight:400; text-shadow: var(--glow-amber-soft); }
+
+  /* shield text */
+  .shield-route { font-family:var(--font-display); font-size:20px; letter-spacing:.14em; fill:var(--amber-dim); }
+  .shield-66 { font-family:var(--font-display); font-size:74px; fill:var(--amber-bright); }
+</style>
+</head>
+<body class="ovl crt-flicker" data-screen-label="Show Badge">
+  <div class="badge-wrap">
+    <div class="wordmark">The Kevin Show</div>
+
+    <svg class="shield-svg" viewBox="0 0 200 210" role="img" aria-label="Route 66 chrome shield">
+      <defs>
+        <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stop-color="#e9e9e9"/>
+          <stop offset="18%" stop-color="#bcbcbc"/>
+          <stop offset="38%" stop-color="#6f6f6f"/>
+          <stop offset="50%" stop-color="#9d9d9d"/>
+          <stop offset="62%" stop-color="#5a5a5a"/>
+          <stop offset="84%" stop-color="#8c8c8c"/>
+          <stop offset="100%" stop-color="#3a3a3a"/>
+        </linearGradient>
+        <linearGradient id="chrome-edge" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fafafa"/>
+          <stop offset="50%" stop-color="#777"/>
+          <stop offset="100%" stop-color="#2a2a2a"/>
+        </linearGradient>
+        <filter id="neonglow" x="-60%" y="-60%" width="220%" height="220%">
+          <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#FFB000" flood-opacity="0.9"/>
+          <feDropShadow dx="0" dy="0" stdDeviation="9" flood-color="#FF9000" flood-opacity="0.55"/>
+        </filter>
+      </defs>
+
+      <!-- outer neon halo of shield -->
+      <path d="M100,8 C86,8 84,18 60,18 C30,18 14,28 14,52 C14,96 54,150 100,200 C146,150 186,96 186,52 C186,28 170,18 140,18 C116,18 114,8 100,8 Z"
+            fill="none" stroke="var(--amber)" stroke-width="3" filter="url(#neonglow)"/>
+      <!-- chrome shield body -->
+      <path d="M100,15 C88,15 86,24 63,24 C34,24 21,33 21,54 C21,94 58,144 100,191 C142,144 179,94 179,54 C179,33 166,24 137,24 C114,24 112,15 100,15 Z"
+            fill="url(#chrome)" stroke="url(#chrome-edge)" stroke-width="4"/>
+      <!-- inner dark face -->
+      <path d="M100,28 C90,28 88,36 67,36 C41,36 30,44 30,62 C30,96 62,138 100,180 C138,138 170,96 170,62 C170,44 159,36 133,36 C112,36 110,28 100,28 Z"
+            fill="#0e0a05" stroke="var(--amber)" stroke-width="2"/>
+      <!-- text -->
+      <text class="shield-route" x="100" y="70" text-anchor="middle">ROUTE</text>
+      <line x1="46" y1="80" x2="154" y2="80" stroke="var(--amber-deep)" stroke-width="2"/>
+      <text class="shield-66" x="100" y="152" text-anchor="middle" filter="url(#neonglow)">66</text>
+    </svg>
+
+    <div class="tag"><b>Tesla</b> meets the <b>Mother Road</b></div>
+  </div>
+</body>
+</html>

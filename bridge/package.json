@@ -1,0 +1,24 @@
+{
+  "name": "route66-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Kevin Show — Route 66 overlay bridge: TeslaMate (MQTT + Postgres) -> WebSocket/REST event hub for OBS overlays. Demo-first; real TeslaMate via config.json.",
+  "scripts": {
+    "start": "node src/index.js",
+    "demo": "R66_MODE=demo node src/index.js",
+    "live": "R66_MODE=live node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "mqtt": "^5.10.1",
+    "pg": "^8.13.1"
+  }
+}

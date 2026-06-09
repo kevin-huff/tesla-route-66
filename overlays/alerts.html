@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alerts &amp; Lower-Thirds — The Kevin Show</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="overlay-system.css">
+<style>
+  html, body { height:100%; }
+  body.ovl { display:flex; align-items:flex-end; justify-content:center; padding:60px 40px; }
+
+  .alert {
+    width: 720px; display:flex; align-items:stretch; gap:0;
+    padding: 0; overflow:hidden;
+  }
+  /* slide / reveal — explicit hidden base + shown state (reliable transition) */
+  .alert { transition: transform .55s cubic-bezier(.16,1,.3,1), opacity .45s ease; opacity:0; transform: translateY(40px); }
+  body.show .alert { opacity:1; transform: translateY(0); }
+
+  .icon-bay {
+    width: 132px; flex:none; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(180deg, rgba(255,176,0,.10), rgba(255,176,0,.02));
+    border-right: 2px solid var(--amber-deep);
+  }
+  .disc {
+    width: 76px; height:76px; border-radius:50%;
+    background: radial-gradient(circle at 36% 30%, #d6d6d6, #7a7a7a 55%, #2c2c2c);
+    box-shadow: inset 0 2px 3px rgba(255,255,255,.5), 0 3px 8px rgba(0,0,0,.7), var(--glow-amber-soft);
+    display:flex; align-items:center; justify-content:center; position:relative;
+  }
+  .disc svg { width:42px; height:42px; }
+  .disc .sym { fill:none; stroke:#0e0a05; stroke-width:7; stroke-linecap:round; stroke-linejoin:round; }
+  .disc .sym-fill { fill:#0e0a05; stroke:none; }
+
+  .alert-text {
+    flex:1; padding: 18px 26px; display:flex; flex-direction:column; justify-content:center; gap:6px;
+    position:relative;
+  }
+  .kicker {
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--font-label); font-size:13px; letter-spacing:.24em; color:var(--amber-dim);
+    text-transform:uppercase;
+  }
+  .kicker .led { width:10px; height:10px; animation: glow-pulse 1s ease-in-out infinite; }
+  .name {
+    font-family:var(--font-display); font-size:40px; line-height:1;
+    color:var(--amber-bright); text-shadow:var(--glow-amber); letter-spacing:.02em;
+  }
+  .detail {
+    font-family:var(--font-label); font-size:15px; letter-spacing:.14em; color:var(--amber);
+  }
+  .detail b { color:var(--amber-bright); font-weight:400; }
+
+  /* chrome shine sweep on entrance */
+  .alert::after {
+    content:""; position:absolute; inset:0; z-index:6; pointer-events:none;
+    background: linear-gradient(105deg, transparent 30%, rgba(255,236,190,.18) 47%, rgba(255,255,255,.32) 50%, rgba(255,236,190,.12) 53%, transparent 70%);
+    transform: translateX(-120%);
+  }
+  body.show .alert::after { animation: shine 1s ease-out .25s 1; }
+  @keyframes shine { to { transform: translateX(120%); } }
+
+  /* warm accent bar */
+  .alert .endcap {
+    width: 8px; flex:none;
+    background: linear-gradient(180deg, var(--amber-bright), var(--amber) 50%, var(--amber-deep));
+    box-shadow: var(--glow-amber);
+  }
+
+  .ctl {
+    position:fixed; bottom:14px; left:50%; transform:translateX(-50%); z-index:50; display:flex; gap:8px;
+  }
+  .ctl button {
+    font-family:var(--font-label); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--amber-dim); background:rgba(20,16,8,.85); border:1px solid var(--amber-deep);
+    border-radius:6px; padding:7px 11px; cursor:pointer;
+  }
+  body.embed .ctl { display:none; }
+</style>
+</head>
+<body class="ovl crt-flicker" data-screen-label="Alerts &amp; Lower-Thirds">
+  <div class="ctl">
+    <button onclick="fire('follow')">Follow</button>
+    <button onclick="fire('sub')">Sub</button>
+    <button onclick="fire('redeem')">Redemption</button>
+    <button onclick="cycle()">▶ Auto-cycle</button>
+  </div>
+
+  <div class="alert panel" id="alert">
+    <span class="panel-glass"></span>
+    <span class="rivets"><i></i><i></i><i></i><i></i></span>
+    <div class="icon-bay">
+      <div class="disc"><svg viewBox="0 0 48 48" id="sym"></svg></div>
+    </div>
+    <div class="alert-text panel-inner">
+      <div class="kicker"><span class="led"></span><span id="kicker">INCOMING SIGNAL · NEW FOLLOWER</span></div>
+      <div class="name" id="name">@dustdevil_dan</div>
+      <div class="detail" id="detail">WELCOME TO THE CONVOY</div>
+    </div>
+    <div class="endcap"></div>
+  </div>
+
+<script src="config/overlay-config.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/telemetry-client.js"></script>
+<script>
+  const client = window.R66;
+  const SYM = {
+    follow: '<path class="sym" d="M24 12 V36 M12 24 H36"/>',          // plus
+    sub: '<path class="sym-fill" d="M24 8 L30 20 L42 24 L30 28 L24 40 L18 28 L6 24 L18 20 Z"/>', // diamond
+    redeem: '<path class="sym-fill" d="M26 6 L12 26 H22 L20 42 L36 20 H25 Z"/>',  // bolt
+  };
+  // local copies for the manual preview buttons (live alerts arrive via the bridge)
+  const ALERTS = {
+    follow: { kind:'follow', kicker:'INCOMING SIGNAL · NEW FOLLOWER', name:'@dustdevil_dan', detail:'WELCOME TO THE CONVOY' },
+    sub:    { kind:'sub', kicker:'TRANSMISSION LOCKED · SUBSCRIBER', name:'@route_runner', detail:'<b>12</b> MONTHS · TIER <b>2</b> · MOTHER ROAD CREW' },
+    redeem: { kind:'redeem', kicker:'CHANNEL POINTS REDEEMED', name:'@neon_nomad', detail:'REWARD · <b>HONK THE HORN</b> · 5,000 PTS' },
+  };
+
+  let hideTimer = null;
+  function show(a){
+    if (!a) return;
+    const kind = SYM[a.kind] ? a.kind : 'follow';
+    document.getElementById('sym').innerHTML = SYM[kind];
+    document.getElementById('kicker').textContent = a.kicker || '';
+    document.getElementById('name').textContent = a.name || '';
+    document.getElementById('detail').innerHTML = a.detail || '';
+    document.body.classList.remove('show');
+    void document.getElementById('alert').offsetWidth; // restart entrance + shine
+    document.body.classList.add('show');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(()=>document.body.classList.remove('show'), 5200);
+  }
+
+  // live alerts (Streamerbot -> POST /api/alert -> bridge) and demo-fallback cycle both
+  // arrive on this channel
+  client.on('alert', show);
+
+  // preview buttons
+  window.fire = (type) => show(ALERTS[type] || ALERTS.follow);
+  window.cycle = () => {
+    const order = ['follow', 'sub', 'redeem'];
+    let i = 0;
+    show(ALERTS[order[0]]);
+    clearInterval(window._cy);
+    window._cy = setInterval(() => { i += 1; show(ALERTS[order[i % 3]]); }, 6200);
+  };
+</script>
+</body>
+</html>

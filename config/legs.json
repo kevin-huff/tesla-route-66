@@ -1,0 +1,22 @@
+{
+  "_note": "Six-leg Route 66 loop. `nodes` SVG coords are lifted verbatim from overlays/map.html (viewBox 0 0 1000 560) so the bridge can project live lat/lng onto the drawn flight plan. `waypoint_ids` are derived at boot from planning/landmarks.json leg ordering; the lists here are informational. lat/lng on each node come from the matching landmark in landmarks.json.",
+  "canvas": { "viewBox": "0 0 1000 560", "width": 1000, "height": 560 },
+
+  "nodes": {
+    "SPR": { "name": "SPRINGFIELD", "state": "MO", "svg": [868, 139], "lat": 37.2089878, "lng": -93.2926909 },
+    "AMA": { "name": "AMARILLO",    "state": "TX", "svg": [528, 262], "lat": 35.1927944, "lng": -101.9332132 },
+    "FLG": { "name": "FLAGSTAFF",   "state": "AZ", "svg": [136, 262], "lat": 35.2083875, "lng": -111.6117613 },
+    "MCP": { "name": "MARICOPA",    "state": "AZ", "svg": [120, 391], "lat": 33.0682495, "lng": -112.0181293, "standby": true },
+    "ELP": { "name": "EL PASO",     "state": "TX", "svg": [340, 471], "lat": 31.794783,  "lng": -106.2663851 },
+    "GAR": { "name": "GARLAND",     "state": "TX", "svg": [736, 403], "lat": 32.9605738, "lng": -96.6387174 }
+  },
+
+  "legs": [
+    { "leg": 1, "title": "Springfield, MO to Amarillo, TX", "from": "SPR", "to": "AMA", "start_landmark_id": "springfield_start", "end_landmark_id": "stay_amarillo" },
+    { "leg": 2, "title": "Amarillo, TX to Flagstaff, AZ",   "from": "AMA", "to": "FLG", "start_landmark_id": "cadillac_ranch",    "end_landmark_id": "stay_flagstaff" },
+    { "leg": 3, "title": "Flagstaff, AZ to Maricopa, AZ",   "from": "FLG", "to": "MCP", "start_landmark_id": "montezuma_castle",  "end_landmark_id": "stay_maricopa", "standby": true },
+    { "leg": 4, "title": "Maricopa, AZ to El Paso, TX",     "from": "MCP", "to": "ELP", "start_landmark_id": "picacho_peak",      "end_landmark_id": "stay_elpaso" },
+    { "leg": 5, "title": "El Paso, TX to Garland, TX",      "from": "ELP", "to": "GAR", "start_landmark_id": "sc_vanhorn",        "end_landmark_id": "stay_garland" },
+    { "leg": 6, "title": "Garland, TX to Springfield, MO",  "from": "GAR", "to": "SPR", "start_landmark_id": "sc_royse",          "end_landmark_id": "springfield_home" }
+  ]
+}

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telemetry Console — The Kevin Show</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="overlay-system.css">
+<style>
+  /* Transparent so it drops straight into OBS as a browser source */
+  html, body { height: 100%; }
+  body.ovl {
+    display: flex; align-items: center; justify-content: center;
+    /* checker only visible in-browser; OBS ignores transparent bg */
+    padding: 40px;
+  }
+  .console {
+    width: 1180px;
+    display: grid;
+    grid-template-columns: 1.15fr 1px 1fr 1px 0.9fr;
+    gap: 0;
+    align-items: stretch;
+  }
+  .bay { padding: 22px 30px 24px; position: relative; }
+  .bay-div {
+    width: 1px; align-self: stretch; margin: 26px 0;
+    background: linear-gradient(180deg, transparent, var(--amber-deep), transparent);
+    box-shadow: 0 0 6px rgba(255,176,0,.18);
+  }
+  .bay-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px;
+  }
+  .bay-head .label { font-size: 15px; }
+  .bay-head .idx { font-family: var(--font-label); color: var(--amber-deep); font-size: 13px; margin-left: auto; }
+
+  /* Big readouts */
+  .big { font-size: 92px; }
+  .mid { font-size: 58px; }
+  .unit {
+    font-family: var(--font-display); font-size: 22px;
+    color: var(--amber-dim); margin-left: 8px; letter-spacing: .04em;
+    text-shadow: none;
+  }
+  .stat-row { display: flex; align-items: baseline; }
+  .substat { margin-top: 14px; display: flex; align-items: baseline; gap: 10px; }
+  .substat .label { font-size: 12px; letter-spacing: .2em; }
+  .substat .readout { font-size: 30px; }
+
+  /* Segmented battery bar */
+  .battbar { display: flex; gap: 4px; margin-top: 16px; height: 26px; }
+  .battbar > span {
+    flex: 1; border-radius: 2px;
+    background: #2a1f08;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.6);
+    transition: background .35s ease, box-shadow .35s ease;
+  }
+  .battbar > span.on {
+    background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+    box-shadow: 0 0 8px rgba(255,176,0,.6), inset 0 0 0 1px rgba(255,220,120,.5);
+  }
+  .battbar > span.warn-on {
+    background: linear-gradient(180deg, #ff7a5a, var(--klaxon));
+    box-shadow: var(--glow-klaxon), inset 0 0 0 1px rgba(255,150,120,.5);
+  }
+
+  /* Console header strip */
+  .console-head {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 30px 0;
+  }
+  .console-head .title { font-family: var(--font-display); font-size: 17px; color: var(--amber); letter-spacing:.1em; text-shadow: var(--glow-amber-soft);}
+  .console-head .sys-status {
+    margin-left: auto; display: flex; align-items: center; gap: 9px;
+    font-family: var(--font-label); font-size: 13px; letter-spacing: .18em; color: var(--amber-dim);
+  }
+
+  /* warning banner */
+  .warnbar {
+    grid-column: 1 / -1;
+    margin: 6px 26px 0; padding: 8px 14px;
+    display: none; align-items: center; gap: 12px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, rgba(255,59,31,.18), rgba(255,59,31,.04));
+    border: 1px solid rgba(255,59,31,.35);
+    font-family: var(--font-display); font-size: 15px; letter-spacing: .14em;
+    color: #ff8a6a; text-shadow: var(--glow-klaxon);
+  }
+  body.warn .warnbar { display: flex; animation: klaxon-throb 1.1s ease-in-out infinite; }
+
+  /* state toggle (preview only; hidden when ?embed) */
+  .toggle {
+    position: fixed; top: 16px; right: 16px; z-index: 50;
+    font-family: var(--font-label); font-size: 12px; letter-spacing: .12em;
+    color: var(--amber-dim); background: rgba(20,16,8,.85);
+    border: 1px solid var(--amber-deep); border-radius: 6px;
+    padding: 7px 12px; cursor: pointer; text-transform: uppercase;
+  }
+  body.embed .toggle { display: none; }
+</style>
+</head>
+<body class="ovl crt-flicker" data-screen-label="Telemetry Console">
+  <button class="toggle" onclick="toggleState()">Toggle warning ⚠</button>
+
+  <div class="console panel" id="console">
+    <span class="panel-glass"></span>
+    <span class="rivets"><i></i><i></i><i></i><i></i></span>
+
+    <div class="console-head">
+      <span class="led" id="sysled"></span>
+      <span class="title">DRIVE TELEMETRY</span>
+      <span class="sys-status"><span id="statustext">ALL SYSTEMS NOMINAL</span></span>
+    </div>
+
+    <div class="warnbar"><span class="led led--warn"></span> LOW CHARGE — DIVERT TO NEAREST SUPERCHARGER</div>
+
+    <!-- PROPULSION -->
+    <section class="bay panel-inner">
+      <div class="bay-head"><span class="led" id="led1"></span><span class="label">PROPULSION</span><span class="idx">01</span></div>
+      <div class="stat-row">
+        <span class="seg"><span class="seg-ghost">888</span><span class="readout big" id="batt">72</span></span>
+        <span class="unit">%</span>
+      </div>
+      <div class="battbar" id="battbar"></div>
+      <div class="substat">
+        <span class="label">RANGE</span>
+        <span class="seg"><span class="seg-ghost">888</span><span class="readout" id="range">214</span></span>
+        <span class="unit" style="font-size:16px">MI</span>
+      </div>
+    </section>
+
+    <div class="bay-div"></div>
+
+    <!-- NAV -->
+    <section class="bay panel-inner">
+      <div class="bay-head"><span class="led"></span><span class="label">NAV</span><span class="idx">02</span></div>
+      <div class="stat-row">
+        <span class="seg"><span class="seg-ghost">888</span><span class="readout big" id="speed">63</span></span>
+        <span class="unit">MPH</span>
+      </div>
+      <div class="substat">
+        <span class="label">HEADING</span>
+        <span class="readout14" id="heading" style="font-size:26px">WSW</span>
+      </div>
+    </section>
+
+    <div class="bay-div"></div>
+
+    <!-- LIFE SUPPORT -->
+    <section class="bay panel-inner">
+      <div class="bay-head"><span class="led"></span><span class="label">LIFE&nbsp;SUPPORT</span><span class="idx">03</span></div>
+      <div class="stat-row">
+        <span class="seg"><span class="seg-ghost">88</span><span class="readout mid" id="cabin">70</span></span>
+        <span class="unit">°F</span>
+      </div>
+      <div class="substat">
+        <span class="label">OUTSIDE</span>
+        <span class="seg"><span class="seg-ghost">88</span><span class="readout" id="outside" style="font-size:30px">94</span></span>
+        <span class="unit" style="font-size:16px">°F</span>
+      </div>
+    </section>
+  </div>
+
+<script src="config/overlay-config.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/telemetry-client.js"></script>
+<script>
+  // 14-segment battery bar + count-up reveal (kept from the design prototype)
+  function buildBattBar(segs, warn) {
+    const bar = document.getElementById('battbar');
+    bar.innerHTML = '';
+    const N = 14;
+    const lit = Math.max(0, Math.min(N, Math.round(segs)));
+    for (let i=0;i<N;i++){
+      const s = document.createElement('span');
+      if (i < lit) s.classList.add(warn ? 'warn-on' : 'on');
+      s.style.transitionDelay = (i*45)+'ms';
+      bar.appendChild(s);
+    }
+  }
+  function countUp(el, to, dur=900){
+    const token = (Number(el.dataset.tok)||0) + 1;
+    el.dataset.tok = token;
+    const from = Number(String(el.textContent).replace(/[^\d.-]/g,'')) || 0;
+    const start = performance.now();
+    function tick(now){
+      if (Number(el.dataset.tok) !== token) return;
+      const t = Math.min(1,(now-start)/dur);
+      const ease = 1-Math.pow(1-t,3);
+      el.textContent = Math.round(from + (to-from)*ease);
+      if (t<1) requestAnimationFrame(tick); else el.textContent = Math.round(to);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  const client = window.R66;
+  let forceWarn = client.params.get('state') === 'warn'; // ?state=warn preview override
+  let firstFrame = true;
+  let lastSpeedAt = 0;
+  const sdMs = (window.R66_CONFIG && window.R66_CONFIG.speedDebounceMs) || 600;
+  const $ = (id) => document.getElementById(id);
+
+  function apply(d){
+    const warn = !!d.warn || forceWarn;
+    document.body.classList.toggle('warn', warn);
+    $('console').classList.toggle('panel--warn', warn);
+    $('statustext').textContent = warn ? 'CHARGE CRITICAL' : (d.statusText || 'ALL SYSTEMS NOMINAL');
+    $('sysled').className = warn ? 'led led--warn' : 'led';
+    $('led1').className = warn ? 'led led--warn' : 'led';
+    $('batt').classList.toggle('readout--warn', warn);
+    $('range').classList.toggle('readout--warn', warn);
+    if (d.heading) $('heading').textContent = d.heading;
+    buildBattBar(d.battSegments != null ? d.battSegments : (d.batteryPct/100)*14, warn);
+
+    if (firstFrame){
+      // count-up reveal on the first live frame
+      countUp($('batt'), d.batteryPct, 1000);
+      countUp($('range'), d.rangeMi, 1100);
+      countUp($('speed'), d.speedMph, 900);
+      countUp($('cabin'), d.cabinF, 700);
+      countUp($('outside'), d.outsideF, 700);
+      firstFrame = false;
+      lastSpeedAt = performance.now();
+    } else {
+      $('batt').textContent = Math.round(d.batteryPct);
+      $('range').textContent = Math.round(d.rangeMi);
+      $('cabin').textContent = Math.round(d.cabinF);
+      $('outside').textContent = Math.round(d.outsideF);
+      const now = performance.now();
+      if (now - lastSpeedAt >= sdMs){ $('speed').textContent = Math.max(0, Math.round(d.speedMph)); lastSpeedAt = now; }
+    }
+  }
+
+  client.on('telemetry', apply);
+
+  // preview toggle (hidden when ?embed): flip the warn look using the last frame
+  function toggleState(){ forceWarn = !forceWarn; const d = client.last('telemetry'); if (d) apply(d); }
+  window.toggleState = toggleState;
+</script>
+</body>
+</html>

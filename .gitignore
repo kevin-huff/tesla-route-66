@@ -1,0 +1,5 @@
+# WSL/Windows alternate-data-stream download metadata
+*:Zone.Identifier
+
+# dependencies (bridge/.gitignore also covers bridge/node_modules)
+node_modules/

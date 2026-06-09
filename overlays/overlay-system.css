@@ -1,0 +1,320 @@
+/* =====================================================================
+   THE KEVIN SHOW — ROUTE 66 OVERLAY SYSTEM
+   Shared tokens, fonts, textures, chrome & panel chassis
+   "Real data, retro housing." Amber on warm near-black. CRT glow.
+   Designed for a 2560x1440 OBS canvas. All units scale from --u.
+   ===================================================================== */
+
+/* ---- Segmented / nixie numeral faces (instrumentation) ---- */
+@font-face {
+  font-family: 'DSEG7 Classic';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/@fontsource/dseg7-classic/files/dseg7-classic-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'DSEG7 Classic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/@fontsource/dseg7-classic/files/dseg7-classic-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'DSEG14 Classic';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/@fontsource/dseg14-classic/files/dseg14-classic-latin-700-normal.woff2') format('woff2');
+}
+
+/* =====================================================================
+   TOKENS
+   ===================================================================== */
+:root {
+  /* Color — amber primary, warm near-black base */
+  --amber:        #FFB000;
+  --amber-bright: #FFCC44;
+  --amber-dim:    #8A5E00;
+  --amber-deep:   #5A3E00;
+  --bg:           #0A0806;
+  --panel:        #141008;
+  --panel-hi:     #1d1710;
+  --panel-lo:     #0c0904;
+  --klaxon:       #FF3B1F;
+  --klaxon-dim:   #7a1c10;
+
+  /* Chrome bevel gradient stops */
+  --chrome-1: #8f8f8f;
+  --chrome-2: #6B6B6B;
+  --chrome-3: #3a3a3a;
+  --chrome-4: #2A2A2A;
+  --chrome-5: #161616;
+
+  /* Glow — give it body, never a hairline (smears under bitrate) */
+  --glow-amber:
+     0 0 2px rgba(255,176,0,.55),
+     0 0 12px rgba(255,176,0,.45),
+     0 0 28px rgba(255,140,0,.28);
+  --glow-amber-soft:
+     0 0 8px rgba(255,176,0,.30),
+     0 0 22px rgba(255,140,0,.18);
+  --glow-klaxon:
+     0 0 3px rgba(255,80,40,.6),
+     0 0 14px rgba(255,59,31,.5),
+     0 0 34px rgba(255,40,10,.32);
+
+  /* Geometry — base scale unit. Tuned for 1440p. */
+  --u: 8px;
+  --radius: 14px;
+  --radius-sm: 8px;
+  --bezel: 10px;
+
+  /* Type families */
+  --font-display: 'Audiowide', system-ui, sans-serif;     /* atomic headers */
+  --font-label:   'Share Tech Mono', ui-monospace, monospace; /* equipment labels */
+  --font-num7:    'DSEG7 Classic', 'Share Tech Mono', monospace;   /* live numbers */
+  --font-num14:   'DSEG14 Classic', 'Share Tech Mono', monospace;  /* alphanumeric readout */
+  --font-script:  'Kaushan Script', cursive;              /* show wordmark */
+}
+
+/* =====================================================================
+   BASE — components live on transparent bg so they drop into OBS solo
+   ===================================================================== */
+* { box-sizing: border-box; }
+
+.ovl-stage,
+body.ovl {
+  margin: 0;
+  background: transparent;
+  color: var(--amber);
+  font-family: var(--font-label);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* =====================================================================
+   CHROME PANEL CHASSIS
+   A console housing: warm near-black fill, brushed-chrome bevel,
+   corner rivets, inner scanlines + soft vignette (panel only).
+   ===================================================================== */
+.panel {
+  position: relative;
+  border-radius: var(--radius);
+  padding: calc(var(--u) * 2.5);
+  background:
+    linear-gradient(180deg, var(--panel-hi) 0%, var(--panel) 42%, var(--panel-lo) 100%);
+  /* chrome bevel frame via layered shadows */
+  box-shadow:
+    /* outer chrome ring */
+    0 0 0 2px var(--chrome-5),
+    0 0 0 4px var(--chrome-3),
+    0 0 0 5px var(--chrome-2),
+    /* drop */
+    0 18px 50px rgba(0,0,0,.65),
+    /* inner top highlight + bottom shade (machined feel) */
+    inset 0 2px 0 rgba(255,255,255,.10),
+    inset 0 -2px 0 rgba(0,0,0,.55),
+    inset 0 0 60px rgba(0,0,0,.55);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Brushed-chrome outer edge drawn as a gradient ring */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: calc(var(--radius) + 5px);
+  padding: 5px;
+  background:
+    linear-gradient(150deg,
+      var(--chrome-1) 0%, var(--chrome-4) 22%,
+      var(--chrome-2) 40%, var(--chrome-5) 58%,
+      var(--chrome-2) 74%, var(--chrome-4) 100%);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Scanlines + CRT vignette — confined to panel interior */
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 2;
+  background:
+    radial-gradient(120% 90% at 50% 30%, transparent 55%, rgba(0,0,0,.45) 100%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,.22) 3px,
+      rgba(0,0,0,.22) 4px);
+  background-size: 100% 100%, 100% 4px;
+  mix-blend-mode: multiply;
+  animation: scanline-drift 8s linear infinite;
+}
+
+/* warm phosphor wash inside the glass */
+.panel > .panel-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(130% 120% at 50% -10%,
+              rgba(255,176,0,.05), transparent 60%);
+}
+
+.panel-inner { position: relative; z-index: 2; }
+
+/* Warning chassis — klaxon shift */
+.panel--warn {
+  background:
+    linear-gradient(180deg, #221008 0%, #1a0b06 50%, #0e0604 100%);
+  box-shadow:
+    0 0 0 2px #200, 0 0 0 4px #5a1408, 0 0 0 5px #7a1c10,
+    0 18px 50px rgba(0,0,0,.7),
+    inset 0 2px 0 rgba(255,120,90,.12),
+    inset 0 -2px 0 rgba(0,0,0,.6),
+    inset 0 0 70px rgba(120,12,4,.45);
+}
+.panel--warn::before {
+  background:
+    linear-gradient(150deg, #b85a48 0%, #3a0f08 30%, #6b1810 55%, #200 78%, #6b1810 100%);
+}
+
+/* ---- Rivets / corner screws ---- */
+.rivets > i {
+  position: absolute;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #cfcfcf 0%, #8a8a8a 28%, #3a3a3a 70%, #1a1a1a 100%);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.8);
+  z-index: 4;
+}
+/* slot screw head */
+.rivets > i::after {
+  content: "";
+  position: absolute; inset: 0; margin: auto;
+  width: 7px; height: 1.5px; border-radius: 1px;
+  background: rgba(0,0,0,.55);
+  transform: rotate(40deg);
+}
+.rivets > i:nth-child(1) { top: 9px;  left: 9px;  }
+.rivets > i:nth-child(2) { top: 9px;  right: 9px; }
+.rivets > i:nth-child(3) { bottom: 9px; left: 9px; }
+.rivets > i:nth-child(4) { bottom: 9px; right: 9px; }
+
+/* =====================================================================
+   TYPE HELPERS
+   ===================================================================== */
+.display {
+  font-family: var(--font-display);
+  color: var(--amber-bright);
+  text-shadow: var(--glow-amber);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.label {
+  font-family: var(--font-label);
+  color: var(--amber-dim);
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  font-size: 13px;
+}
+.label-amber { color: var(--amber); text-shadow: var(--glow-amber-soft); }
+
+.readout {
+  font-family: var(--font-num7);
+  color: var(--amber-bright);
+  text-shadow: var(--glow-amber);
+  letter-spacing: .02em;
+  line-height: 1;
+}
+/* unlit "ghost" segments behind a 7-seg readout — sell the LCD */
+.seg {
+  position: relative;
+  display: inline-block;
+  font-family: var(--font-num7);
+}
+.seg > .seg-ghost {
+  position: absolute; inset: 0;
+  color: rgba(255,176,0,.08);
+  text-shadow: none;
+  pointer-events: none;
+}
+.readout14 {
+  font-family: var(--font-num14);
+  color: var(--amber-bright);
+  text-shadow: var(--glow-amber);
+}
+
+.warn .readout, .readout--warn { color: #ff7a5a; text-shadow: var(--glow-klaxon); }
+.warn .display, .display--warn { color: #ff7a5a; text-shadow: var(--glow-klaxon); }
+
+/* Divider rule with machined ticks */
+.rule {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--amber-deep) 12%, var(--amber-deep) 88%, transparent);
+  opacity: .7;
+}
+
+/* Small status LED */
+.led {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, var(--amber-bright), var(--amber) 45%, #6a3d00 100%);
+  box-shadow: var(--glow-amber);
+}
+.led--off { background: radial-gradient(circle at 38% 35%, #3a2c10, #1a1308); box-shadow: none; }
+.led--warn { background: radial-gradient(circle at 38% 35%, #ff8a6a, var(--klaxon) 45%, #5a1004 100%); box-shadow: var(--glow-klaxon); }
+
+/* =====================================================================
+   ANIMATIONS
+   ===================================================================== */
+@keyframes scanline-drift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 0, 0 8px; }
+}
+@keyframes flicker {
+  0%, 96%, 100% { opacity: 1; }
+  97% { opacity: .82; }
+  98% { opacity: .96; }
+  99% { opacity: .78; }
+}
+@keyframes glow-pulse {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.35); }
+}
+@keyframes leg-pulse {
+  0%, 100% { opacity: .55; filter: drop-shadow(0 0 2px var(--amber)); }
+  50%      { opacity: 1;   filter: drop-shadow(0 0 10px var(--amber-bright)); }
+}
+@keyframes node-ping {
+  0%   { transform: scale(1);   opacity: .9; }
+  70%  { transform: scale(2.6); opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes klaxon-throb {
+  0%, 100% { opacity: .25; }
+  50%      { opacity: .9; }
+}
+@keyframes caret-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* whole-panel CRT flicker (very subtle) */
+.crt-flicker { animation: flicker 7s infinite steps(1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel::after { animation: none; }
+  .crt-flicker { animation: none; }
+}

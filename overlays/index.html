@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Kevin Show — Route 66 Overlay System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Kaushan+Script&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="overlay-system.css">
+<style>
+  body.ovl {
+    background: #060504;
+    color: var(--amber);
+    min-height: 100vh;
+    padding: 56px 48px 96px;
+  }
+  .wrap { max-width: 1480px; margin: 0 auto; }
+
+  /* ---- page header ---- */
+  .page-head { display:flex; align-items:flex-end; gap:26px; margin-bottom: 8px; flex-wrap:wrap; }
+  .page-head h1 {
+    font-family: var(--font-script); font-size: 64px; font-weight:400; margin:0;
+    color:#fff3d8; line-height:.9;
+    text-shadow: 0 0 6px #fff, 0 0 16px var(--amber-bright), 0 0 34px rgba(255,140,0,.6);
+  }
+  .page-head .meta { font-family:var(--font-label); color:var(--amber-dim); font-size:13px; letter-spacing:.18em; line-height:1.7; }
+  .page-head .meta b { color:var(--amber); font-weight:400; }
+  .kicker-row { font-family:var(--font-display); color:var(--amber); letter-spacing:.16em; font-size:14px; margin-bottom:30px; text-shadow:var(--glow-amber-soft); }
+
+  .section-label {
+    font-family:var(--font-display); font-size:18px; letter-spacing:.12em; color:var(--amber);
+    text-shadow:var(--glow-amber-soft); margin: 46px 0 6px; display:flex; align-items:center; gap:14px;
+  }
+  .section-label::before { content:""; width:26px; height:2px; background:var(--amber); box-shadow:var(--glow-amber); }
+  .section-sub { font-family:var(--font-label); font-size:13px; letter-spacing:.16em; color:var(--amber-dim); margin-bottom:18px; }
+
+  /* ---- stream mock ---- */
+  .mock {
+    position: relative; width: 100%; border-radius: 10px; overflow:hidden;
+    box-shadow: 0 0 0 1px #2a2a2a, 0 0 0 4px #141414, 0 24px 60px rgba(0,0,0,.6);
+    margin-bottom: 10px;
+  }
+  .mock .stage {
+    position: relative; width:2560px; height:1440px;
+  }
+  /* camera feed placeholder — kept clean, NO scanlines/vignette per brief */
+  .cam {
+    position:absolute; inset:0;
+    background:
+      linear-gradient(180deg, #14181f 0%, #0e1116 40%, #0a0c10 100%),
+      repeating-linear-gradient(135deg, rgba(255,255,255,.018) 0 22px, transparent 22px 44px);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .cam .road {
+    position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+    width:1400px; height:760px;
+    background: linear-gradient(180deg, transparent, rgba(120,140,160,.05) 60%, rgba(140,160,180,.08));
+    clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+  }
+  .cam .horizon { position:absolute; top:40%; left:0; right:0; height:1px; background:rgba(255,200,120,.06); }
+  .cam .camlabel {
+    font-family: var(--font-label); color: rgba(180,200,220,.45); font-size: 26px; letter-spacing:.3em;
+    text-align:center; line-height:2; z-index:1;
+  }
+  .cam .camlabel b { color: rgba(200,220,240,.7); font-weight:400; display:block; font-size:30px; }
+  .cam .camlabel small { font-size:18px; letter-spacing:.2em; color:rgba(160,180,200,.35); }
+
+  .ov { position:absolute; border:0; background:transparent; display:block; }
+
+  .mock-cap {
+    font-family:var(--font-label); font-size:12px; letter-spacing:.16em; color:var(--amber-dim);
+    margin: 0 0 34px; display:flex; gap:18px; flex-wrap:wrap;
+  }
+  .mock-cap b { color:var(--amber); font-weight:400; }
+  .chip {
+    display:inline-flex; align-items:center; gap:7px; border:1px solid var(--amber-deep);
+    border-radius:4px; padding:3px 9px; color:var(--amber-dim);
+  }
+  .chip .led { width:8px; height:8px; }
+  .chip.warn { border-color: var(--klaxon-dim); color:#c66; }
+  .chip.warn .led { background:radial-gradient(circle at 38% 35%, #ff8a6a, var(--klaxon) 45%, #5a1004); box-shadow:var(--glow-klaxon); }
+
+  /* ---- component index ---- */
+  .index { display:grid; grid-template-columns: repeat(2, 1fr); gap:18px; }
+  .icard {
+    background: linear-gradient(180deg,#141008,#0c0904);
+    border-radius:10px; padding: 20px 22px;
+    box-shadow: 0 0 0 1px #2a2a2a, inset 0 1px 0 rgba(255,255,255,.05);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .icard .top { display:flex; align-items:baseline; gap:12px; }
+  .icard .n { font-family:var(--font-num7); color:var(--amber-bright); font-size:22px; text-shadow:var(--glow-amber); }
+  .icard h3 { font-family:var(--font-display); font-size:17px; color:var(--amber); margin:0; letter-spacing:.04em; text-shadow:var(--glow-amber-soft); }
+  .icard p { font-family:var(--font-label); font-size:13px; line-height:1.6; color:var(--amber-dim); margin:2px 0 0; letter-spacing:.04em; }
+  .icard .tags { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  .icard .tag { font-family:var(--font-label); font-size:11px; letter-spacing:.12em; color:var(--amber); border:1px solid var(--amber-deep); border-radius:3px; padding:2px 7px; }
+  .icard a {
+    margin-top:10px; font-family:var(--font-label); font-size:12px; letter-spacing:.14em;
+    color:var(--amber-bright); text-decoration:none; text-transform:uppercase;
+    border:1px solid var(--amber-deep); border-radius:5px; padding:7px 12px; align-self:flex-start;
+    transition: background .2s, box-shadow .2s;
+  }
+  .icard a:hover { background: rgba(255,176,0,.08); box-shadow: var(--glow-amber-soft); }
+  .icard .pos { font-family:var(--font-label); font-size:11px; letter-spacing:.1em; color:var(--amber-deep); margin-top:4px; }
+
+  /* ---- token sheet ---- */
+  .tokens { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+  .tk { background: linear-gradient(180deg,#141008,#0c0904); border-radius:10px; padding:22px; box-shadow:0 0 0 1px #2a2a2a; }
+  .tk h3 { font-family:var(--font-display); font-size:15px; color:var(--amber); margin:0 0 16px; letter-spacing:.08em; }
+  .swatch-row { display:flex; gap:10px; flex-wrap:wrap; }
+  .sw { width:120px; }
+  .sw .chiprow { height:54px; border-radius:6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .sw .nm { font-family:var(--font-label); font-size:11px; color:var(--amber); margin-top:7px; letter-spacing:.06em; }
+  .sw .hex { font-family:var(--font-label); font-size:11px; color:var(--amber-dim); }
+  .typ { margin-bottom:16px; }
+  .typ .lbl { font-family:var(--font-label); font-size:11px; color:var(--amber-dim); letter-spacing:.18em; margin-bottom:6px; }
+  .typ .spec { color:var(--amber-bright); }
+  .glowbox { display:flex; gap:14px; flex-wrap:wrap; }
+  .gb { font-family:var(--font-num7); font-size:34px; color:var(--amber-bright); }
+  .tk table { width:100%; border-collapse:collapse; font-family:var(--font-label); font-size:12px; }
+  .tk td { padding:6px 4px; border-bottom:1px solid rgba(255,176,0,.08); color:var(--amber); letter-spacing:.04em; }
+  .tk td:first-child { color:var(--amber-dim); }
+  .tk td:last-child { text-align:right; font-family:var(--font-label); color:var(--amber-bright); letter-spacing:.06em; }
+
+  .footnote { font-family:var(--font-label); font-size:12px; color:var(--amber-deep); letter-spacing:.1em; margin-top:46px; line-height:1.8; }
+</style>
+</head>
+<body class="ovl">
+<div class="wrap">
+
+  <div class="kicker-row">OVERLAY SYSTEM · OBS BROWSER SOURCES · 2560 × 1440</div>
+  <div class="page-head">
+    <h1>The Kevin Show</h1>
+    <div class="meta">
+      ROUTE 66 SERIES — <b>TESLA MEETS THE MOTHER ROAD</b><br>
+      Real EV telemetry · retro housing · amber CRT console<br>
+      Six-leg loop · Springfield → Maricopa standby → Springfield
+    </div>
+  </div>
+
+  <!-- ============ MOCK A — NORMAL ============ -->
+  <div class="section-label">STREAM MOCK · A — DRIVING / NOMINAL</div>
+  <div class="section-sub">Persistent HUD over a clean camera feed. Badge, mission map, telemetry &amp; logbook always on.</div>
+
+  <div class="mock" id="mockA">
+    <div class="stage">
+      <div class="cam">
+        <div class="horizon"></div>
+        <div class="road"></div>
+        <div class="camlabel"><b>LIVE CAMERA FEED</b>drop dashcam / in-car video here<small>kept clean — no scanlines or vignette over camera</small></div>
+      </div>
+      <img class="ov" src="assets/badge.png"       style="left:40px;  top:20px;   width:620px;  height:540px;" alt="Show badge">
+      <img class="ov" src="assets/map.png"         style="left:1370px;top:30px;   width:1140px; height:760px;" alt="Mission map">
+      <img class="ov" src="assets/tele-normal.png" style="left:40px;  top:700px;  width:1280px; height:460px;" alt="Telemetry console">
+      <img class="ov" src="assets/log.png"         style="left:500px; top:1190px; width:1560px; height:220px;" alt="Logbook counters">
+    </div>
+  </div>
+  <div class="mock-cap">
+    <span class="chip"><span class="led"></span>SHOW BADGE</span>
+    <span class="chip"><span class="led"></span>MISSION MAP · LEG 03/06</span>
+    <span class="chip"><span class="led"></span>TELEMETRY · NOMINAL</span>
+    <span class="chip"><span class="led"></span>FLIGHT LOG · CUMULATIVE</span>
+  </div>
+
+  <!-- ============ MOCK B — EVENT ============ -->
+  <div class="section-label">STREAM MOCK · B — LOW CHARGE / INCOMING EVENT</div>
+  <div class="section-sub">Telemetry in klaxon warning state, an active landmark transmission, and a subscriber alert in the lower third.</div>
+
+  <div class="mock" id="mockB">
+    <div class="stage">
+      <div class="cam">
+        <div class="horizon"></div>
+        <div class="road"></div>
+        <div class="camlabel"><b>LIVE CAMERA FEED</b>drop dashcam / in-car video here</div>
+      </div>
+      <img class="ov" src="assets/map.png"        style="left:1370px;top:30px;   width:1140px; height:760px;" alt="Mission map">
+      <img class="ov" src="assets/tx.png"         style="left:40px;  top:40px;   width:720px;  height:400px;" alt="Transmission card">
+      <img class="ov" src="assets/tele-warn.png"  style="left:40px;  top:620px;  width:1280px; height:460px;" alt="Telemetry warning">
+      <img class="ov" src="assets/alert-sub.png"  style="left:880px; top:1100px; width:800px;  height:320px;" alt="Subscriber alert">
+    </div>
+  </div>
+  <div class="mock-cap">
+    <span class="chip warn"><span class="led"></span>TELEMETRY · CHARGE CRITICAL</span>
+    <span class="chip"><span class="led"></span>TRANSMISSION · CADILLAC RANCH</span>
+    <span class="chip"><span class="led"></span>ALERT · NEW SUBSCRIBER</span>
+  </div>
+
+  <!-- ============ COMPONENT INDEX ============ -->
+  <div class="section-label">COMPONENT INDEX</div>
+  <div class="section-sub">Each is a self-contained OBS browser source on a transparent background. Open standalone to preview every state.</div>
+
+  <div class="index">
+    <div class="icard">
+      <div class="top"><span class="n">01</span><h3>MISSION MAP</h3></div>
+      <p>Six-leg loop as a glowing vector flight plan. Completed legs solid, current leg pulsing, Maricopa as a STANDBY node. Readouts for leg, distance &amp; ETA.</p>
+      <div class="tags"><span class="tag">SVG</span><span class="tag">LEG 03/06</span><span class="tag">PULSE</span></div>
+      <div class="pos">OBS · TOP-RIGHT · ~1240×840</div>
+      <a href="map.html" target="_blank">Open ↗</a>
+    </div>
+
+    <div class="icard">
+      <div class="top"><span class="n">02</span><h3>TELEMETRY CONSOLE</h3></div>
+      <p>Propulsion, Nav &amp; Life Support — battery, range, speed, cabin temp. Normal amber state plus a low-charge klaxon warning state.</p>
+      <div class="tags"><span class="tag">NORMAL</span><span class="tag">WARNING</span><span class="tag">?state=warn</span></div>
+      <div class="pos">OBS · BOTTOM-LEFT · ~1360×520</div>
+      <a href="telemetry.html" target="_blank">Open ↗</a>
+    </div>
+
+    <div class="icard">
+      <div class="top"><span class="n">03</span><h3>TRANSMISSION CARD</h3></div>
+      <p>Landmark lore as an incoming teletype. Header reads INCOMING TRANSMISSION — [PLACE]. Copy types out character by character.</p>
+      <div class="tags"><span class="tag">IDLE</span><span class="tag">ACTIVE</span><span class="tag">TYPEWRITER</span></div>
+      <div class="pos">OBS · UPPER-LEFT · ~780×470</div>
+      <a href="transmission.html" target="_blank">Open ↗</a>
+    </div>
+
+    <div class="icard">
+      <div class="top"><span class="n">04</span><h3>LOGBOOK COUNTERS</h3></div>
+      <p>Punch-card tally that persists across all six legs: states crossed, Superchargers docked, miles logged, gas stations bypassed, elevation gained.</p>
+      <div class="tags"><span class="tag">PERSISTENT</span><span class="tag">COUNT-UP</span></div>
+      <div class="pos">OBS · BOTTOM STRIP · ~1700×280</div>
+      <a href="logbook.html" target="_blank">Open ↗</a>
+    </div>
+
+    <div class="icard">
+      <div class="top"><span class="n">05</span><h3>SHOW BADGE</h3></div>
+      <p>“The Kevin Show” as a chrome-and-neon Route 66 shield. Flickering neon script over a brushed-chrome highway shield.</p>
+      <div class="tags"><span class="tag">SVG</span><span class="tag">NEON</span><span class="tag">CHROME</span></div>
+      <div class="pos">OBS · TOP-LEFT · ~640×560</div>
+      <a href="badge.html" target="_blank">Open ↗</a>
+    </div>
+
+    <div class="icard">
+      <div class="top"><span class="n">06</span><h3>ALERTS &amp; LOWER-THIRDS</h3></div>
+      <p>Follow, sub &amp; channel-point redemption alerts in the console language. Chrome disc icon, shine sweep on entrance, auto-cycle in preview.</p>
+      <div class="tags"><span class="tag">FOLLOW</span><span class="tag">SUB</span><span class="tag">REDEEM</span></div>
+      <div class="pos">OBS · LOWER-THIRD · ~840×360</div>
+      <a href="alerts.html" target="_blank">Open ↗</a>
+    </div>
+  </div>
+
+  <!-- ============ TOKEN SHEET ============ -->
+  <div class="section-label">TOKEN SHEET</div>
+  <div class="section-sub">Drop-in values for the developer. Full set lives in <b>overlay-system.css</b>.</div>
+
+  <div class="tokens">
+    <div class="tk">
+      <h3>COLOR</h3>
+      <div class="swatch-row">
+        <div class="sw"><div class="chiprow" style="background:#FFB000"></div><div class="nm">AMBER</div><div class="hex">#FFB000</div></div>
+        <div class="sw"><div class="chiprow" style="background:#FFCC44"></div><div class="nm">AMBER BRIGHT</div><div class="hex">#FFCC44</div></div>
+        <div class="sw"><div class="chiprow" style="background:#8A5E00"></div><div class="nm">AMBER DIM</div><div class="hex">#8A5E00</div></div>
+        <div class="sw"><div class="chiprow" style="background:#FF3B1F"></div><div class="nm">KLAXON</div><div class="hex">#FF3B1F</div></div>
+        <div class="sw"><div class="chiprow" style="background:#141008"></div><div class="nm">PANEL</div><div class="hex">#141008</div></div>
+        <div class="sw"><div class="chiprow" style="background:#0A0806"></div><div class="nm">BASE</div><div class="hex">#0A0806</div></div>
+        <div class="sw"><div class="chiprow" style="background:linear-gradient(180deg,#8f8f8f,#2A2A2A)"></div><div class="nm">CHROME</div><div class="hex">#6B6B6B→#2A2A2A</div></div>
+      </div>
+    </div>
+
+    <div class="tk">
+      <h3>TYPOGRAPHY</h3>
+      <div class="typ"><div class="lbl">DISPLAY / HEADERS — AUDIOWIDE</div><div class="display spec" style="font-size:28px">PROPULSION · LEG 03</div></div>
+      <div class="typ"><div class="lbl">LABELS / EQUIPMENT — SHARE TECH MONO</div><div class="label" style="font-size:15px;color:var(--amber)">RANGE · HEADING · SUPERCHARGERS DOCKED</div></div>
+      <div class="typ"><div class="lbl">INSTRUMENTATION — DSEG7 CLASSIC (7-SEG)</div><div class="readout" style="font-size:40px">72% · 63 MPH</div></div>
+      <div class="typ"><div class="lbl">WORDMARK — KAUSHAN SCRIPT</div><div style="font-family:var(--font-script);font-size:32px;color:#fff3d8;text-shadow:0 0 12px var(--amber-bright)">The Kevin Show</div></div>
+    </div>
+
+    <div class="tk">
+      <h3>GLOW &amp; EFFECTS</h3>
+      <div class="glowbox" style="margin-bottom:16px">
+        <span class="gb" style="text-shadow:var(--glow-amber)">888</span>
+        <span class="gb" style="text-shadow:var(--glow-amber-soft)">888</span>
+        <span class="gb" style="text-shadow:var(--glow-klaxon);color:#ff7a5a">888</span>
+      </div>
+      <table>
+        <tr><td>amber glow</td><td>0 0 12px / 28px</td></tr>
+        <tr><td>klaxon glow</td><td>0 0 14px / 34px</td></tr>
+        <tr><td>scanline pitch</td><td>4px</td></tr>
+        <tr><td>scanline drift</td><td>8s loop</td></tr>
+        <tr><td>min glow body</td><td>≥ 2px (no 1px hairlines)</td></tr>
+      </table>
+    </div>
+
+    <div class="tk">
+      <h3>GEOMETRY &amp; SPACING</h3>
+      <table>
+        <tr><td>base unit (--u)</td><td>8px</td></tr>
+        <tr><td>panel radius</td><td>14px</td></tr>
+        <tr><td>small radius</td><td>8px</td></tr>
+        <tr><td>chrome bevel</td><td>5px ring</td></tr>
+        <tr><td>rivet</td><td>11px disc</td></tr>
+        <tr><td>canvas</td><td>2560 × 1440</td></tr>
+        <tr><td>safe margin</td><td>~40px</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="footnote">
+    CANVAS NOTE — Designed at <b style="color:var(--amber)">2560 × 1440 (1440p)</b> per confirmation; the brief assumed 1080p. All sources scale cleanly to a 1080p canvas.<br>
+    DELIVERY — Each component is a transparent OBS browser source. Add as Browser Source, set width/height to the size noted on each card, position per OBS zone.<br>
+    APPEND <b>?embed</b> to any component URL to hide its preview controls in OBS. Telemetry warning: <b>?state=warn</b>. Transmission idle: <b>?idle</b>.
+  </div>
+
+</div>
+
+<script>
+  // scale each 2560x1440 stage to its container width using zoom
+  // (zoom is a layout-level scale — iframes inside paint reliably in Chromium/OBS CEF,
+  //  unlike transform:scale which can suppress nested iframe rendering)
+  function scaleMocks(){
+    document.querySelectorAll('.mock').forEach(m=>{
+      const w = m.clientWidth;
+      const s = w / 2560;
+      m.querySelector('.stage').style.zoom = s;
+    });
+  }
+  window.addEventListener('resize', scaleMocks);
+  window.addEventListener('load', scaleMocks);
+  scaleMocks();
+</script>
+</body>
+</html>
