@@ -61,6 +61,11 @@ export function loadConfig() {
   if (env.R66_PG_PASSWORD) cfg.postgres.password = env.R66_PG_PASSWORD;
   if (env.R66_MQTT_USERNAME) cfg.mqtt.username = env.R66_MQTT_USERNAME;
   if (env.R66_MQTT_PASSWORD) cfg.mqtt.password = env.R66_MQTT_PASSWORD;
+  if (cfg.transmissions?.llm) {
+    if (env.R66_LLM_BASE_URL) cfg.transmissions.llm.baseUrl = env.R66_LLM_BASE_URL;
+    if (env.R66_LLM_API_KEY) cfg.transmissions.llm.apiKey = env.R66_LLM_API_KEY;
+    if (env.R66_LLM_MODEL) cfg.transmissions.llm.model = env.R66_LLM_MODEL;
+  }
 
   if (cfg.mode !== 'demo' && cfg.mode !== 'live') {
     throw new Error(`config.mode must be "demo" or "live" (got "${cfg.mode}")`);
@@ -70,6 +75,7 @@ export function loadConfig() {
   cfg.paths = {
     landmarks: resolve(cfg.trip.landmarksPath),
     legs: resolve(cfg.trip.legsPath),
+    routeGeometry: resolve(cfg.trip.routeGeometryPath || '../config/route-geometry.json'),
     overlays: resolve(cfg.server.overlaysDir),
     state: path.join(BRIDGE_ROOT, 'data', 'state.json'),
   };

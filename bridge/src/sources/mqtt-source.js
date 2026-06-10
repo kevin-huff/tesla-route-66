@@ -21,6 +21,7 @@ const TOPIC_MAP = {
   state: (s, v) => { s.state = String(v); },
   charger_power: (s, v) => { s.chargerPowerKw = num(v) || 0; },
   plugged_in: (s, v) => { s.pluggedIn = v === 'true' || v === true; },
+  charge_energy_added: (s, v) => { s.chargeEnergyAddedKwh = num(v) || 0; }, // kWh, per session, from the car
 };
 
 const num = (v) => {
@@ -42,6 +43,7 @@ export async function startLiveSources({ cfg, route, store, hub, onTick }) {
     batteryLevel: null, usableBatteryLevel: null, speedKmh: 0, lat: null, lng: null,
     estRangeKm: 0, insideTempC: 0, outsideTempC: 0, odometerKm: null, elevationM: null,
     state: 'online', chargerPowerKw: 0, pluggedIn: false, headingDeg: null,
+    chargeEnergyAddedKwh: 0, // dtSec stays unset live — the pipeline uses wall-clock deltas
   };
   let dirty = false;
   let emitTimer = null;

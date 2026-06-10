@@ -26,10 +26,13 @@
     "timezone": "America/Chicago",
     "landmarksPath": "../planning/landmarks.json",
     "legsPath": "../config/legs.json",
+    "routeGeometryPath": "../config/route-geometry.json",
     "odometerBaselineKm": null,
     "elevationBaselineM": null,
     "statesPlanned": ["MO", "KS", "OK", "TX", "NM", "AZ"],
-    "avgIceTankRangeMi": 29
+    "avgIceTankRangeMi": 29,
+    "iceMpg": 25,
+    "gasPriceUsdPerGal": 3.2
   },
 
   "thresholds": {
@@ -38,6 +41,22 @@
     "lowBatteryRearmPct": 3,
     "speedSpikeMph": 25,
     "speedMaxPlausibleMph": 110
+  },
+
+  "transmissions": {
+    "source": "llm",
+    "intervalSec": 300,
+    "kickoffSec": 20,
+    "drivingOnly": true,
+    "minMoveMi": 3,
+    "llm": {
+      "baseUrl": "http://localhost:8484/v1",
+      "apiKey": "",
+      "model": "claude-sonnet-4-5",
+      "temperature": null,
+      "maxTokens": 220,
+      "timeoutMs": 30000
+    }
   },
 
   "mqtt": {

@@ -20,9 +20,14 @@ export function defaultStore(totalLegs = 6) {
     elevationAccumFt: 0,
     lastElevationM: null,
     visited: [], // landmark ids (once-per-trip latch)
+    trail: [], // breadcrumb [lng,lat] points, thinned + capped (map overlay seed)
     statesSeen: [], // 2-letter codes
     superchargers: 0,
     legsDone: 0,
+    kwhCharged: 0, // committed charge-session energy (charge_energy_added at unplug)
+    driveSecs: 0, // accumulated while state=driving (sim-time in demo)
+    chargeSecs: 0, // accumulated while charging
+    routeDistM: 0, // last on-route distance along the loop (road-path locate)
     totalLegs,
     lowBatteryArmed: true,
     lastTransmission: null,

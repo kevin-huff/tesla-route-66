@@ -29,10 +29,14 @@
   }
   .log-head .punchrow i.filled { background: var(--amber-deep); box-shadow:0 0 6px rgba(255,176,0,.3); }
 
+  /* two rotating pages, stacked + crossfaded (CRT page flip) */
+  .pages { position:relative; margin-top: 14px; }
   .counters {
     display:grid; grid-template-columns: repeat(5, 1fr);
-    margin-top: 14px;
+    transition: opacity .35s ease;
   }
+  .counters:not(.active) { opacity:0; position:absolute; inset:0; pointer-events:none; }
+  .counters.active { opacity:1; position:relative; }
   .cell {
     position:relative; padding: 6px 26px 10px;
     display:flex; flex-direction:column; gap:10px;
@@ -42,16 +46,22 @@
     background: linear-gradient(180deg, transparent, var(--amber-deep), transparent);
   }
   .cell .clabel {
-    font-family:var(--font-label); font-size:12px; letter-spacing:.16em; color:var(--amber-dim);
+    font-family:var(--font-label); font-size:12px; letter-spacing:.16em; color:var(--amber);
     text-transform:uppercase; display:flex; align-items:center; gap:8px;
   }
   .cell .num {
-    font-family:var(--font-num7); font-size:50px; color:var(--amber-bright);
-    text-shadow:var(--glow-amber); letter-spacing:.01em; display:flex; align-items:baseline; gap:8px;
+    font-family:var(--font-num7); font-size:50px; color:#FFD86A;  /* hotter lit core so digits pop */
+    /* tighter glow than the shared one — keeps the digits crisp instead of blooming together */
+    text-shadow:0 0 2px rgba(255,176,0,.6), 0 0 6px rgba(255,140,0,.3);
+    letter-spacing:.06em; display:flex; align-items:baseline; gap:8px;
   }
   .seg-wrap { position:relative; }
-  .seg-wrap .ghost { position:absolute; inset:0; color:rgba(255,176,0,.07); }
-  .cell .unit { font-family:var(--font-display); font-size:15px; color:var(--amber-dim); letter-spacing:.04em; }
+  /* ghost placeholder digits removed — they muddied contrast and made short values (esp.
+     elevation, value shorter than the 6-digit placeholder) look zero-padded */
+  .seg-wrap .ghost { display:none; }
+  .cell .unit { font-family:var(--font-display); font-size:15px; color:var(--amber); letter-spacing:.04em; }
+  .cell .frac { font-family:var(--font-num7); font-size:24px; color:var(--amber-dim); }
+  .cell .cur  { font-family:var(--font-display); font-size:26px; color:var(--amber); margin-right:2px; }
 
   /* small chrome glyph badge per counter */
   .glyph {
@@ -78,30 +88,57 @@
     <div class="panel-inner">
       <div class="log-head">
         <span class="title">FLIGHT LOG</span>
-        <span class="sub">· CUMULATIVE · ALL SIX LEGS</span>
+        <span class="sub" id="pagesub">· CUMULATIVE · PG 1/2 · THE TRIP</span>
         <span class="punchrow" id="punch"></span>
       </div>
 
-      <div class="counters">
-        <div class="cell">
-          <div class="clabel"><span class="glyph on"></span>STATES CROSSED</div>
-          <div class="num"><span class="seg-wrap"><span class="ghost">88</span><span data-key="states" data-to="5">0</span></span></div>
+      <div class="pages">
+        <!-- PG 1 · THE TRIP -->
+        <div class="counters active" id="page1">
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>MILES LOGGED</div>
+            <div class="num"><span class="seg-wrap"><span data-key="miles" data-comma="1">0</span></span></div>
+          </div>
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>ROUTE COMPLETE</div>
+            <div class="num"><span class="seg-wrap"><span data-key="routePct">0</span></span><span class="unit">%</span></div>
+          </div>
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>WAYPOINTS LOGGED</div>
+            <div class="num"><span class="seg-wrap"><span data-key="waypoints">0</span></span><span class="frac" id="wptotal">/58</span></div>
+          </div>
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>STATES CROSSED</div>
+            <div class="num"><span class="seg-wrap"><span data-key="states">0</span></span></div>
+          </div>
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>DAYS ON ROAD</div>
+            <div class="num"><span class="seg-wrap"><span data-key="days">0</span></span></div>
+          </div>
         </div>
-        <div class="cell">
-          <div class="clabel"><span class="glyph on"></span>SUPERCHARGERS DOCKED</div>
-          <div class="num"><span class="seg-wrap"><span class="ghost">88</span><span data-key="superchargers" data-to="18">0</span></span></div>
-        </div>
-        <div class="cell">
-          <div class="clabel"><span class="glyph on"></span>MILES LOGGED</div>
-          <div class="num"><span class="seg-wrap"><span class="ghost">8,888</span><span data-key="miles" data-to="1847" data-comma="1">0</span></span></div>
-        </div>
-        <div class="cell">
-          <div class="clabel"><span class="glyph"></span>STATIONS BYPASSED <span class="flex-tag">NO GAS</span></div>
-          <div class="num"><span class="seg-wrap"><span class="ghost">88</span><span data-key="stationsBypassed" data-to="63">0</span></span></div>
-        </div>
-        <div class="cell">
-          <div class="clabel"><span class="glyph on"></span>ELEVATION GAINED</div>
-          <div class="num"><span class="seg-wrap"><span class="ghost">88,888</span><span data-key="elevationFt" data-to="11200" data-comma="1">0</span></span><span class="unit">FT</span></div>
+
+        <!-- PG 2 · POWERTRAIN -->
+        <div class="counters" id="page2">
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>ENERGY CHARGED</div>
+            <div class="num"><span class="seg-wrap"><span data-key="kwhCharged" data-comma="1">0</span></span><span class="unit">KWH</span></div>
+          </div>
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>SUPERCHARGERS DOCKED</div>
+            <div class="num"><span class="seg-wrap"><span data-key="superchargers">0</span></span></div>
+          </div>
+          <div class="cell">
+            <div class="clabel"><span class="glyph"></span>GAS MONEY SAVED <span class="flex-tag">NO GAS</span></div>
+            <div class="num"><span class="cur">$</span><span class="seg-wrap"><span data-key="gasSaved" data-comma="1">0</span></span></div>
+          </div>
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>DRIVE TIME</div>
+            <div class="num"><span class="seg-wrap"><span data-key="driveHrs" data-dec="1">0</span></span><span class="unit">HRS</span></div>
+          </div>
+          <div class="cell">
+            <div class="clabel"><span class="glyph on"></span>CHARGE TIME</div>
+            <div class="num"><span class="seg-wrap"><span data-key="chargeHrs" data-dec="1">0</span></span><span class="unit">HRS</span></div>
+          </div>
         </div>
       </div>
     </div>
@@ -124,12 +161,16 @@
   }
   renderPunch(0);
 
-  function fmt(n, comma){ return comma ? Number(n).toLocaleString('en-US') : String(n); }
+  function fmt(n, comma, dec){
+    if (dec) return Number(n).toFixed(dec);
+    return comma ? Number(Math.round(n)).toLocaleString('en-US') : String(Math.round(n));
+  }
 
   function countUp(el, to){
     const comma = el.dataset.comma;
+    const dec = Number(el.dataset.dec) || 0;
     const from = Number(String(el.textContent).replace(/[^\d.-]/g,'')) || 0;
-    if (from === to){ el.textContent = fmt(to, comma); return; }
+    if (from === to){ el.textContent = fmt(to, comma, dec); return; }
     const token = (Number(el.dataset.tok)||0) + 1;
     el.dataset.tok = token;
     const dur = 700;
@@ -138,13 +179,14 @@
       if (Number(el.dataset.tok) !== token) return;
       const t = Math.min(1,(now-start)/dur);
       const ease = 1-Math.pow(1-t,3);
-      el.textContent = fmt(Math.round(from + (to-from)*ease), comma);
-      if (t<1) requestAnimationFrame(tick); else el.textContent = fmt(to, comma);
+      el.textContent = fmt(from + (to-from)*ease, comma, dec);
+      if (t<1) requestAnimationFrame(tick); else el.textContent = fmt(to, comma, dec);
     }
     requestAnimationFrame(tick);
   }
 
-  const KEYS = ['states','superchargers','miles','stationsBypassed','elevationFt'];
+  const KEYS = ['miles','routePct','waypoints','states','days',
+                'kwhCharged','superchargers','gasSaved','driveHrs','chargeHrs'];
   let first = true;
   client.on('logbook', (d)=>{
     if (!d) return;
@@ -152,12 +194,31 @@
       const el = document.querySelector(`[data-key="${k}"]`);
       if (!el || d[k] == null) return;
       el.dataset.to = d[k];
-      if (first) setTimeout(()=>countUp(el, +d[k]), 120 + i*100);
+      if (first) setTimeout(()=>countUp(el, +d[k]), 120 + (i%5)*100);
       else countUp(el, +d[k]);
     });
+    if (d.totalWaypoints) {
+      const wt = document.getElementById('wptotal');
+      if (wt) wt.textContent = '/' + d.totalWaypoints;
+    }
     renderPunch(d.legsDone || 0);
     first = false;
   });
+
+  // page rotation — CRT crossfade between THE TRIP and POWERTRAIN. ?page=1|2 pins
+  // a page (handy for OBS layout work); values keep updating on the hidden page.
+  const SUBS = ['· CUMULATIVE · PG 1/2 · THE TRIP', '· CUMULATIVE · PG 2/2 · POWERTRAIN'];
+  const pageEls = [document.getElementById('page1'), document.getElementById('page2')];
+  const pagesub = document.getElementById('pagesub');
+  const pinned = Number(client.params.get('page')) || 0;
+  let pg = pinned ? pinned - 1 : 0;
+  function showPage(n){
+    pg = n % 2;
+    pageEls.forEach((el, i)=>{ if (el) el.classList.toggle('active', i === pg); });
+    if (pagesub) pagesub.textContent = SUBS[pg];
+  }
+  showPage(pg);
+  if (!pinned) setInterval(()=>showPage(pg + 1), 12000);
 </script>
 </body>
 </html>

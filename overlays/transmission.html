@@ -53,10 +53,12 @@
     border-left: 3px solid var(--amber-deep);
     border-radius: 3px;
     min-height: 150px;
+    max-height: 232px;   /* keep the card within the OBS source height */
+    overflow: hidden;    /* hard stop — a long body can't spill past the card */
   }
   .tx-body .line {
     font-family: var(--font-label);
-    font-size: 19px; line-height: 1.65;
+    font-size: 18px; line-height: 1.55;
     color: var(--amber);
     text-shadow: 0 0 6px rgba(255,176,0,.25);
     white-space: pre-wrap;
@@ -78,9 +80,10 @@
   .bars i:nth-child(1){height:5px}.bars i:nth-child(2){height:8px}.bars i:nth-child(3){height:11px}.bars i:nth-child(4){height:14px}.bars i:nth-child(5){height:16px;background:#3a2c10;box-shadow:none}
   .tx-foot .status { margin-left:auto; color:var(--amber); }
 
-  /* idle vs active */
-  .tx { transition: opacity .5s ease, transform .5s cubic-bezier(.2,.9,.3,1); }
-  body.idle .tx { opacity:0; transform: translateY(24px) scale(.98); pointer-events:none; }
+  /* idle vs active — fully hidden when idle (not just transparent) */
+  .tx { transition: opacity .5s ease, transform .5s cubic-bezier(.2,.9,.3,1), visibility 0s linear 0s; }
+  body.idle .tx { opacity:0; visibility:hidden; transform: translateY(24px) scale(.98); pointer-events:none;
+    transition: opacity .5s ease, transform .5s cubic-bezier(.2,.9,.3,1), visibility 0s linear .5s; }
 
   .ctl {
     position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:50;
@@ -139,16 +142,19 @@
   const $ = (id) => document.getElementById(id);
   let typing = null;
   let message = '';
+  let hideTimer = null;
+  let startTimer = null;
 
-  function play(){
+  function typeOut(){
     document.body.classList.remove('idle');
+    clearTimeout(startTimer);   // cancel any pending start so we never run two typewriters at once
     clearInterval(typing);
     lineEl.textContent = '';
     statusEl.textContent = '▮ RECEIVING';
     statusEl.style.color = 'var(--amber)';
     const caret = document.createElement('span'); caret.className = 'caret';
     let i = 0;
-    setTimeout(()=>{
+    startTimer = setTimeout(()=>{
       lineEl.appendChild(caret);
       typing = setInterval(()=>{
         if (i < message.length){
@@ -166,25 +172,34 @@
 
   // populate the card from a geofence transmission, then type out the lore
   function receive(t){
-    if (!t) return;
+    if (!t || !(t.body || '').trim()) return; // never show an empty box
     message = t.body || '';
     if (t.sig) $('sig').textContent = t.sig;
     if (t.place) $('place').textContent = '— ' + t.place;
     if (t.latText && t.lngText) $('coordmeta').textContent = `${t.latText} · ${t.lngText}`;
     if (t.legLabel) $('legmeta').innerHTML = t.legLabel.replace(/LEG (\d+)/, 'LEG <b>$1</b>');
     if (t.timeText) $('timemeta').innerHTML = t.timeText.replace(/(\d{1,2}:\d{2}[^<]*)$/, '<b>$1</b>');
-    play();
+    typeOut();
+    scheduleHide();
+  }
+
+  // auto-hide the card a minute or two after it appears (config: transmissionDwellMs)
+  function scheduleHide(){
+    clearTimeout(hideTimer);
+    const dwell = (window.R66_CONFIG && window.R66_CONFIG.transmissionDwellMs) || 90000;
+    hideTimer = setTimeout(() => document.body.classList.add('idle'), dwell);
+    if (hideTimer && hideTimer.unref) hideTimer.unref();
   }
 
   function toggleIdle(){ document.body.classList.toggle('idle'); }
   // preview buttons
-  window.play = () => { const t = client.last('transmission'); if (t) receive(t); else if (message) play(); };
+  window.play = () => { const t = client.last('transmission'); if (t) receive(t); else if (message) typeOut(); };
   window.toggleIdle = toggleIdle;
 
   client.on('transmission', receive);
-  client.on('transmission:clear', () => document.body.classList.add('idle'));
+  client.on('transmission:clear', () => { clearTimeout(hideTimer); document.body.classList.add('idle'); });
 
-  // start hidden; a transmission slides it in (don't re-type stale lore on a reconnect)
+  // start hidden; the bridge replays the last transmission on connect, then it auto-hides
   document.body.classList.add('idle');
 </script>
 </body>

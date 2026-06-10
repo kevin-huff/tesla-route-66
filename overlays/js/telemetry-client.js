@@ -41,9 +41,12 @@
     if (msg.type === 'snapshot') {
       const d = msg.data || {};
       if (d.telemetry) dispatch('telemetry', d.telemetry);
+      if (d.trail) dispatch('trail', d.trail); // before map: seed the breadcrumb first
       if (d.map) dispatch('map', d.map);
       if (d.logbook) dispatch('logbook', d.logbook);
-      if (d.lastTransmission) last['transmission'] = d.lastTransmission; // keep, don't re-type
+      // always re-show the last transmission on (re)connect (OBS refresh / fire-then-open);
+      // the overlay auto-hides it after transmissionDwellMs.
+      if (d.lastTransmission) dispatch('transmission', d.lastTransmission);
       dispatch('status', { connected: true, mode: d.mode });
       return;
     }
@@ -84,7 +87,8 @@
       opened = true;
       backoff = cfg.reconnectBaseMs || 500;
       stopDemo();
-      try { ws.send(JSON.stringify({ type: 'hello' })); } catch (e) {}
+      // the server already sends a snapshot on connect — don't request a second one
+      // (a duplicate snapshot would re-fire the last transmission and type it twice)
       dispatch('status', { connected: true });
     };
     ws.onmessage = (ev) => {
@@ -123,10 +127,10 @@
     if (params.has('embed') && document.body) document.body.classList.add('embed');
   }
 
+  applyEmbed(); // body exists when this script runs at the end of <body>
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { applyEmbed(); connect(); });
   } else {
-    applyEmbed();
     connect();
   }
 })();

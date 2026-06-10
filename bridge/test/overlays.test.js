@@ -73,13 +73,14 @@ function loadOverlay(file, { search = '' } = {}) {
     addEventListener: () => {},
   };
 
-  const win = {};
   const location = { search, protocol: 'http:', host: 'localhost:8787' };
-  win.location = location;
-
+  // unref'd timers: overlays schedule repeating work (page rotation, demo feeds) that
+  // must not pin the test subprocess's event loop open after the assertions finish
+  const bgTimeout = (fn, ms, ...a) => { const t = setTimeout(fn, ms, ...a); if (t.unref) t.unref(); return t; };
+  const bgInterval = (fn, ms, ...a) => { const t = setInterval(fn, ms, ...a); if (t.unref) t.unref(); return t; };
   const sandbox = {
-    window: win, document, location, console,
-    setTimeout, clearTimeout, setInterval, clearInterval,
+    document, location, console,
+    setTimeout: bgTimeout, clearTimeout, setInterval: bgInterval, clearInterval,
     performance: { now: () => Date.now() },
     requestAnimationFrame: (cb) => setTimeout(() => cb(Date.now()), 0),
     cancelAnimationFrame: (id) => clearTimeout(id),
@@ -87,16 +88,18 @@ function loadOverlay(file, { search = '' } = {}) {
     WebSocket: function () { this.send = () => {}; this.close = () => {}; },
     Math, JSON, Number, String, Array, Object, Date, parseInt, parseFloat, isNaN,
   };
+  sandbox.window = sandbox; // browser-like: window === global, so `window.X = …` clobbers a same-named function X
   vm.createContext(sandbox);
 
   for (const m of html.matchAll(/<script(?:\s+src="([^"]+)")?\s*>([\s\S]*?)<\/script>/g)) {
     const src = m[1];
     if (src && /^https?:/.test(src)) continue;
+    if (src && /^vendor\//.test(src)) continue; // vendored libs (maplibre) are environment, not contract
     const code = src ? fs.readFileSync(path.join(OVERLAYS, src), 'utf8') : m[2];
     vm.runInContext(code, sandbox, { filename: src || `${file}#inline` });
   }
 
-  return { sandbox, byId, byKey, document, win };
+  return { sandbox, byId, byKey, document, win: sandbox };
 }
 
 test('telemetry overlay maps live telemetry fields to the DOM', () => {
@@ -121,12 +124,12 @@ test('telemetry overlay maps live telemetry fields to the DOM', () => {
   assert.ok(byId.console.classList.contains('panel--warn'));
 });
 
-test('map overlay updates legs, vehicle, footer', () => {
+test('map overlay updates footer, badge, and coordinate chip', () => {
   const { byId, win } = loadOverlay('map.html');
   win.R66.dispatch('map', {
     currentLeg: 4, totalLegs: 6,
     legStatus: ['done', 'done', 'done', 'current', 'future', 'future'],
-    vehicle: { svgX: 300, svgY: 450, onLeg: 4, progress: 0.3 },
+    vehicle: { lat: 32.27, lng: -110.97, onLeg: 4, progress: 0.3 },
     nextWaypoint: { name: 'EL PASO, TX', tag: '' },
     distToNextMi: 123, etaText: '2:05', standby: { active: false, node: 'MCP' },
   });
@@ -134,27 +137,60 @@ test('map overlay updates legs, vehicle, footer', () => {
   assert.equal(byId.dist.textContent, '123');
   assert.equal(byId.eta.textContent, '2:05');
   assert.ok(byId.nextwp.innerHTML.includes('EL PASO'));
-  assert.equal(byId.leg1.getAttribute('class'), 'leg done');
-  assert.equal(byId.leg4.getAttribute('class'), 'leg current');
-  assert.equal(byId.leg6.getAttribute('class'), 'leg future');
-  assert.ok(byId.veh.getAttribute('transform').includes('300'));
-  assert.equal(byId.dotELP.getAttribute('class'), 'node-dot future'); // leg 4 not done yet
+  assert.equal(byId.plantext.textContent, 'FLIGHT PLAN ACTIVE');
+
+  win.R66.dispatch('telemetry', { lat: 32.2705, lng: -110.9743, headingDeg: 118, heading: 'ESE' });
+  assert.ok(byId.coords.textContent.includes('32.27050°N'));
+  assert.ok(byId.coords.textContent.includes('110.97430°W'));
+  assert.equal(byId.hdg.textContent, 'HDG 118° ESE');
+
+  // Maricopa standby week flips the flight-plan badge
+  win.R66.dispatch('map', {
+    currentLeg: 4, totalLegs: 6,
+    legStatus: ['done', 'done', 'done', 'current', 'future', 'future'],
+    vehicle: { lat: 33.07, lng: -112.02, onLeg: 4, progress: 0 },
+    nextWaypoint: { name: 'EL PASO, TX', tag: '' },
+    distToNextMi: 443, etaText: '--:--', standby: { active: true, node: 'MCP' },
+  });
+  assert.equal(byId.plantext.textContent, 'STANDBY · MARICOPA, AZ');
 });
 
-test('logbook overlay maps counters + punchrow', () => {
+test('logbook overlay maps both pages of counters + punchrow', () => {
   const { byKey, byId, win } = loadOverlay('logbook.html');
   win.R66.dispatch('logbook', {
-    states: 6, superchargers: 20, miles: 2500, stationsBypassed: 86, elevationFt: 9000,
+    states: 6, superchargers: 12, miles: 2500, stationsBypassed: 86, elevationFt: 9000,
     legsDone: 4, totalLegs: 6,
+    routePct: 71, waypoints: 44, totalWaypoints: 58, days: 11,
+    kwhCharged: 540, gasSaved: 320, driveHrs: 38.4, chargeHrs: 5.2,
   });
-  assert.equal(byKey.states.dataset.to, 6);
-  assert.equal(byKey.superchargers.dataset.to, 20);
+  // PG 1 · THE TRIP
   assert.equal(byKey.miles.dataset.to, 2500);
-  assert.equal(byKey.stationsBypassed.dataset.to, 86);
-  assert.equal(byKey.elevationFt.dataset.to, 9000);
+  assert.equal(byKey.routePct.dataset.to, 71);
+  assert.equal(byKey.waypoints.dataset.to, 44);
+  assert.equal(byKey.states.dataset.to, 6);
+  assert.equal(byKey.days.dataset.to, 11);
+  assert.equal(byId.wptotal.textContent, '/58');
+  // PG 2 · POWERTRAIN
+  assert.equal(byKey.kwhCharged.dataset.to, 540);
+  assert.equal(byKey.superchargers.dataset.to, 12);
+  assert.equal(byKey.gasSaved.dataset.to, 320);
+  assert.equal(byKey.driveHrs.dataset.to, 38.4);
+  assert.equal(byKey.chargeHrs.dataset.to, 5.2);
+  // rotation starts on page 1
+  assert.ok(byId.page1.classList.contains('active'));
+  assert.ok(!byId.page2.classList.contains('active'));
+  assert.ok(byId.pagesub.textContent.includes('THE TRIP'));
+  // punchrow
   assert.equal(byId.punch.children.length, 6);
   assert.ok(byId.punch.children[3].classList.contains('filled'));
   assert.ok(!byId.punch.children[4].classList.contains('filled'));
+});
+
+test('logbook ?page=2 pins the POWERTRAIN page', () => {
+  const { byId } = loadOverlay('logbook.html', { search: '?page=2' });
+  assert.ok(byId.page2.classList.contains('active'));
+  assert.ok(!byId.page1.classList.contains('active'));
+  assert.ok(byId.pagesub.textContent.includes('POWERTRAIN'));
 });
 
 test('transmission overlay populates the card from a geofence event', () => {

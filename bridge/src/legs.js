@@ -65,6 +65,13 @@ export class Route {
     this.byId = byId;
     this.route = route;
     this.standbyLeg = legs.find((l) => l.standby) || null;
+    this.roadPath = null;
+  }
+
+  // optional real road geometry (road-path.js) — upgrades distToNextMi from
+  // as-the-crow-flies to distance along the actual planned roads
+  attachRoadPath(roadPath) {
+    this.roadPath = roadPath;
   }
 
   landmark(id) {
@@ -108,9 +115,24 @@ export class Route {
     const svgX = round(from.svg[0] + (to.svg[0] - from.svg[0]) * progress, 1);
     const svgY = round(from.svg[1] + (to.svg[1] - from.svg[1]) * progress, 1);
 
-    const distToNextMi = have
+    let distToNextMi = have
       ? round(kmToMi(haversine(lat, lng, to.lat, to.lng) / 1000), 0)
       : 0;
+    let routeDistM = null; // distance along the loop, only while actually near the plan
+    if (have && this.roadPath) {
+      // distance along the planned road, not the crow-flies chord. Restrict the match
+      // to at/after this leg's stretch (start/home share coords) and only trust it
+      // when the car is actually near the planned route.
+      const fromM = cur > 1
+        ? this.roadPath.distById.get(this.legByNum(cur - 1).end_landmark_id) ?? 0
+        : 0;
+      const endM = this.roadPath.distById.get(leg.end_landmark_id);
+      const loc = this.roadPath.locate(lat, lng, { minM: fromM });
+      if (endM != null && loc && loc.offM < 3000) {
+        distToNextMi = round(kmToMi(Math.max(0, endM - loc.distM) / 1000), 0);
+        routeDistM = Math.round(loc.distM);
+      }
+    }
 
     let etaText = '--:--';
     if (speedMph > 3 && distToNextMi >= 0) {
@@ -145,6 +167,8 @@ export class Route {
       nextWaypoint: { name: `${to.name}, ${to.state}`, tag },
       distToNextMi,
       etaText,
+      routeDistM,
+      routeTotalM: this.roadPath ? Math.round(this.roadPath.totalM) : null,
       standby: { active: standbyActive, node: this.standbyLeg ? this.standbyLeg.to : null },
     };
   }

@@ -14,6 +14,7 @@ import { createState } from '../src/state.js';
 import { createStore } from '../src/persistence.js';
 import { createPipeline } from '../src/pipeline.js';
 import { createReplaySource } from '../src/sources/replay-source.js';
+import { buildRoadPath, loadGeometry } from '../src/road-path.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -21,7 +22,11 @@ function runOneLoop() {
   const cfg = loadConfig();
   cfg.demo.timeCompression = 600; // fewer ticks; landmark snapping keeps geofences exact
   cfg.demo.loop = true;
+  cfg.transmissions = { ...cfg.transmissions, source: 'geofence' }; // this test exercises the geofence path
   const route = loadRoute({ legsPath: cfg.paths.legs, landmarksPath: cfg.paths.landmarks });
+  // mirror the index.js boot wiring: road geometry drives the replay AND road-accurate map/logbook
+  const roadPath = buildRoadPath(route.route, loadGeometry(cfg.paths.routeGeometry));
+  route.attachRoadPath(roadPath);
 
   const fp = path.join(os.tmpdir(), `r66-replay-${process.pid}.json`);
   fs.rmSync(fp, { force: true });
@@ -32,7 +37,7 @@ function runOneLoop() {
   const hub = { broadcast: (type, data) => events.push({ type, data: JSON.parse(JSON.stringify(data)) }) };
 
   const pipeline = createPipeline({ cfg, route, store, state, hub });
-  const source = createReplaySource({ route, store, config: cfg });
+  const source = createReplaySource({ route, store, config: cfg, roadPath });
   source.on('telemetry', pipeline.processTick);
   let looped = false;
   source.on('loop', () => { looped = true; });
@@ -89,6 +94,16 @@ test('logbook counters climb over the trip', () => {
   assert.ok(final.states >= 5);
   assert.ok(final.stationsBypassed > 0);
   assert.ok(final.elevationFt > 0);
+  // THE TRIP page
+  assert.equal(final.waypoints, 58, 'every waypoint logged by loop end');
+  assert.equal(final.totalWaypoints, 58);
+  assert.ok(final.routePct >= 95, `route % completes (got ${final.routePct})`);
+  assert.ok(final.days >= 1);
+  // POWERTRAIN page — sim-time + session-energy accounting
+  assert.ok(final.kwhCharged > 100, `charge sessions committed (got ${final.kwhCharged} kWh)`);
+  assert.ok(final.driveHrs > 30, `drive hours accrue in sim time (got ${final.driveHrs})`);
+  assert.ok(final.chargeHrs > 2, `charge hours accrue (got ${final.chargeHrs})`);
+  assert.ok(final.gasSaved > 100, `gas savings derived (got $${final.gasSaved})`);
 });
 
 test('map vehicle stays on the drawn flight plan (svg within canvas)', () => {

@@ -31,9 +31,10 @@ const allowBold = (s) => esc(s).replace(/&lt;(\/?)b&gt;/g, '<$1b>');
 export function createHub({ config, state, store, route, replay }) {
   const startedAt = Date.now();
   let seq = 0;
+  let txGen = null; // set by index.js when the LLM generator is enabled
   const server = http.createServer(handleHttp);
   const wss = new WebSocketServer({ noServer: true });
-  const health = { mqtt: 'n/a', pg: 'n/a' };
+  const health = { mqtt: 'n/a', pg: 'n/a', llm: 'n/a' };
 
   function envelope(type, data) {
     return JSON.stringify({ type, ts: new Date().toISOString(), seq: ++seq, data });
@@ -46,6 +47,7 @@ export function createHub({ config, state, store, route, replay }) {
       map: state.map,
       logbook: state.logbook,
       lastTransmission: state.lastTransmission,
+      trail: store.get().trail || [], // breadcrumb seed for the map overlay
     };
   }
 
@@ -117,6 +119,7 @@ export function createHub({ config, state, store, route, replay }) {
         mode: state.mode,
         mqtt: health.mqtt,
         pg: health.pg,
+        llm: health.llm,
         clients: wss.clients.size,
         uptimeSec: Math.round((Date.now() - startedAt) / 1000),
       });
@@ -128,6 +131,23 @@ export function createHub({ config, state, store, route, replay }) {
     }
     if (p === '/api/transmission/current') {
       return json(res, 200, state.lastTransmission || { idle: true });
+    }
+    if (p === '/api/transmission/show') {
+      // re-show the last transmission (wire to a Twitch chat command / OBS hotkey). GET or POST.
+      const tx = state.lastTransmission;
+      if (!tx) return json(res, 404, { ok: false, error: 'no transmission yet' });
+      broadcast('transmission', tx);
+      return json(res, 200, { ok: true, tx });
+    }
+    if (p === '/api/transmission/generate' || p === '/api/transmission/test') {
+      // force-generate a NEW LLM transmission now (ignores the driving/move gates). GET or POST.
+      if (!txGen) {
+        return json(res, 409, { ok: false, error: 'LLM transmissions disabled (set transmissions.source to include "llm")' });
+      }
+      return txGen
+        .generateNow()
+        .then((r) => json(res, r.ok ? 200 : 502, r))
+        .catch((e) => json(res, 500, { ok: false, error: String((e && e.message) || e) }));
     }
     if (p === '/api/alert' && req.method === 'POST') {
       return readBody(req).then((b) => {
@@ -167,7 +187,13 @@ export function createHub({ config, state, store, route, replay }) {
     if (!full.startsWith(path.normalize(root))) return json(res, 403, { error: 'forbidden' });
     fs.readFile(full, (err, buf) => {
       if (err) return json(res, 404, { error: 'not found', path: rel });
-      send(res, 200, MIME[path.extname(full)] || 'application/octet-stream', buf);
+      // no-store so OBS / browsers never serve a stale overlay after an edit
+      res.writeHead(200, {
+        'content-type': MIME[path.extname(full)] || 'application/octet-stream',
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-store, no-cache, must-revalidate',
+      });
+      res.end(buf);
     });
   }
 
@@ -181,6 +207,7 @@ export function createHub({ config, state, store, route, replay }) {
     listen,
     broadcast,
     setHealth: (patch) => Object.assign(health, patch),
+    setTransmissionGenerator: (g) => { txGen = g; },
     clientCount: () => wss.clients.size,
     close: () => { clearInterval(hb); wss.close(); server.close(); },
   };

@@ -8,30 +8,22 @@ import { createGeofence } from './geofence.js';
 import { deriveLogbook } from './logbook.js';
 import { haversine } from './geo.js';
 import { kmToMi, kmhToMph, cToF, mToFt, degToCompass, round, clamp } from './units.js';
+import { pad2, fmtLat, fmtLng, fmtTime } from './format.js';
 
-const pad2 = (n) => String(n).padStart(2, '0');
-const fmtLat = (lat) => `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? 'N' : 'S'}`;
-const fmtLng = (lng) => `${Math.abs(lng).toFixed(4)}°${lng >= 0 ? 'E' : 'W'}`;
-
-function fmtTime(tz) {
-  const d = new Date();
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz, month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false, timeZoneName: 'short',
-    }).formatToParts(d);
-    const g = (ty) => parts.find((p) => p.type === ty)?.value || '';
-    return `${g('month')}·${g('day')} · ${g('hour')}:${g('minute')} ${g('timeZoneName')}`;
-  } catch {
-    return d.toISOString().slice(5, 16).replace('T', ' ');
-  }
-}
+// breadcrumb thinning: a point every ~300 m, capped (~466 mi of tail) — enough for the
+// map overlay to repaint the driven path after an OBS refresh without bloating state.json
+const TRAIL_MIN_M = 300;
+const TRAIL_MAX_POINTS = 2500;
 
 export function createPipeline({ cfg, route, store, state, hub }) {
   const geofence = createGeofence(route, store);
+  // whether geofence entries feed the Transmission Card. "llm" hands the card to the LLM
+  // generator instead (geofences still drive legs/logbook/events). Default keeps old behavior.
+  const emitGeoTx = (cfg.transmissions?.source ?? 'geofence') !== 'llm';
   let lastLogbookStr = '';
   let lastHeadingDeg = 0;
-  let txClearTimer = null;
+  let lastTickWallMs = null;
+  let chargeSessionKwh = 0; // running charge_energy_added; committed to the store at unplug
 
   function buildTransmission(lm) {
     const { sig, place } = splitHeader(lm.header, lm.name);
@@ -41,13 +33,6 @@ export function createPipeline({ cfg, route, store, state, hub }) {
       leg: lm.leg, legLabel: `LEG ${pad2(lm.leg)} · ${place.replace(',', '')}`,
       timeText: fmtTime(cfg.trip.timezone), signal: 5, radiusM: lm.radius_m,
     };
-  }
-
-  function scheduleTxClear(id, body) {
-    clearTimeout(txClearTimer);
-    const typeMs = (body?.length || 120) * 22;
-    txClearTimer = setTimeout(() => hub.broadcast('transmission:clear', { id }), typeMs + 8000);
-    if (txClearTimer && txClearTimer.unref) txClearTimer.unref();
   }
 
   function nearestSupercharger(lat, lng) {
@@ -62,15 +47,20 @@ export function createPipeline({ cfg, route, store, state, hub }) {
     return best ? { name: best.name, distMi: round(kmToMi(bd / 1000), 0) } : null;
   }
 
-  function onLandmarkEnter(lm) {
-    const tx = buildTransmission(lm);
+  // Broadcast a fully-formed transmission and schedule its return to idle. Shared by the
+  // geofence path and the LLM generator (via the returned handle).
+  function emitTransmission(tx) {
     state.lastTransmission = tx;
     store.get().lastTransmission = tx;
     hub.broadcast('transmission', tx);
+    // the overlay owns auto-hide timing (transmissionDwellMs) so it works on reconnect too
+  }
+
+  function onLandmarkEnter(lm) {
     hub.broadcast('event:landmarkEntered', {
       id: lm.id, name: lm.name, type_: lm.type, leg: lm.leg, header: lm.header,
     });
-    scheduleTxClear(lm.id, tx.body);
+    if (emitGeoTx) emitTransmission(buildTransmission(lm)); // suppressed when source === 'llm'
 
     const leg = route.legs.find((l) => l.end_landmark_id === lm.id);
     if (leg) {
@@ -143,6 +133,37 @@ export function createPipeline({ cfg, route, store, state, hub }) {
     t.warn = t.usableBatteryPct <= cfg.thresholds.lowBatteryPct && !t.pluggedIn;
     t.statusText = t.warn ? 'CHARGE CRITICAL' : 'ALL SYSTEMS NOMINAL';
 
+    if (t.lat != null && t.lng != null) {
+      const tr = s.trail || (s.trail = []); // tolerate stores written before trail existed
+      const lastPt = tr[tr.length - 1];
+      if (!lastPt || haversine(t.lat, t.lng, lastPt[1], lastPt[0]) >= TRAIL_MIN_M) {
+        tr.push([round(t.lng, 5), round(t.lat, 5)]);
+        if (tr.length > TRAIL_MAX_POINTS) tr.splice(0, tr.length - TRAIL_MAX_POINTS);
+      }
+    }
+
+    // --- time + energy accounting (logbook) ---
+    // dt: replay supplies compressed sim-seconds; live falls back to wall-clock,
+    // capped so an MQTT gap (sleep, dead zone) can't dump an hour into a counter.
+    const nowMs = Date.now();
+    const dt = snap.dtSec != null
+      ? snap.dtSec
+      : lastTickWallMs != null ? Math.min(60, Math.max(0, (nowMs - lastTickWallMs) / 1000)) : 0;
+    lastTickWallMs = nowMs;
+    const charging = snap.state === 'charging' || (t.pluggedIn && t.chargerKw > 0.5);
+    if (snap.state === 'driving' && t.speedMph > 0) s.driveSecs = (s.driveSecs || 0) + dt;
+    if (charging) s.chargeSecs = (s.chargeSecs || 0) + dt;
+    // charge_energy_added is per-session and monotonic while plugged in; commit at unplug
+    if (charging || t.pluggedIn) {
+      if ((snap.chargeEnergyAddedKwh || 0) > chargeSessionKwh) {
+        chargeSessionKwh = snap.chargeEnergyAddedKwh;
+      }
+    } else if (chargeSessionKwh > 0) {
+      s.kwhCharged = (s.kwhCharged || 0) + chargeSessionKwh;
+      chargeSessionKwh = 0;
+      store.flush(); // session totals are must-not-lose
+    }
+
     for (const lm of geofence.check(snap.lat, snap.lng)) onLandmarkEnter(lm);
 
     const map = route.computeMapState({
@@ -150,6 +171,7 @@ export function createPipeline({ cfg, route, store, state, hub }) {
     });
     if (snap.standbyHint) map.standby.active = true;
     Object.assign(state.map, map);
+    if (map.routeDistM != null) s.routeDistM = map.routeDistM; // on-route progress for ROUTE COMPLETE %
 
     Object.assign(state.logbook, deriveLogbook(route, store, cfg));
 
@@ -170,6 +192,8 @@ export function createPipeline({ cfg, route, store, state, hub }) {
     store.reset();
     geofence.reset();
     lastLogbookStr = '';
+    lastTickWallMs = null;
+    chargeSessionKwh = 0;
     state.lastTransmission = null;
   }
 
@@ -177,5 +201,5 @@ export function createPipeline({ cfg, route, store, state, hub }) {
   Object.assign(state.logbook, deriveLogbook(route, store, cfg));
   state.lastTransmission = store.get().lastTransmission;
 
-  return { processTick, onLoopReset, geofence };
+  return { processTick, onLoopReset, geofence, emitTransmission };
 }

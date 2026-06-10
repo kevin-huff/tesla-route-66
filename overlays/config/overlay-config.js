@@ -15,5 +15,23 @@
     demoFallbackMs: 2500,
     // Smooth jumpy speed in the readout (the bridge also smooths upstream).
     speedDebounceMs: 600,
+    // How long a transmission stays on screen before it auto-hides (ms). ~1-2 minutes.
+    transmissionDwellMs: 90000,
+    // Mission Map (map.html) — live basemap + follow-cam tuning.
+    map: {
+      // OpenFreeMap: free vector tiles + glyphs, no API key. Swap both for a
+      // self-hosted tile server if it ever goes away; the amber style adapts.
+      tilesUrl: 'https://tiles.openfreemap.org/planet',
+      glyphsUrl: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+      // Speed-adaptive follow zoom: parked reads street-level, cruise reads regional.
+      // [maxMph, zoom] pairs, first match wins; last entry is the highway default.
+      zoomBySpeed: [[3, 13.0], [25, 12.2], [45, 11.4], [999, 10.6]],
+      // Don't chase tiny zoom changes — re-zoom only past this delta (prevents breathing).
+      zoomDeadband: 0.35,
+      // Append a breadcrumb point once the car has moved this far (meters).
+      trailMinMoveM: 120,
+      // Cap the live trail polyline (oldest points drop off; ~250 mi at 120 m spacing).
+      trailMaxPoints: 3500,
+    },
   };
 })();

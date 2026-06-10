@@ -24,27 +24,47 @@
     redeem: { kind: 'redeem', kicker: 'CHANNEL POINTS REDEEMED', name: '@neon_nomad', detail: 'REWARD · <b>HONK THE HORN</b> · 5,000 PTS' },
   };
 
+  // real on-route fixes (leg 3, I-17 south near New River AZ; warn = Continental Divide NM)
+  // so the live-map overlay renders the canned car ON the drawn route
+  const FIX = { lat: 33.92068, lng: -112.14488, headingDeg: 186, heading: 'S' };
+  const FIX_WARN = { lat: 35.4320653, lng: -108.3311462, headingDeg: 247, heading: 'WSW' };
+  const TRAIL = [
+    [-112.03643, 34.44638], [-112.04907, 34.42706], [-112.06957, 34.4121], [-112.08831, 34.38695],
+    [-112.11552, 34.36517], [-112.12552, 34.31136], [-112.12281, 34.28669], [-112.11685, 34.26427],
+    [-112.11383, 34.25144], [-112.11723, 34.23322], [-112.11141, 34.21848], [-112.13371, 34.18762],
+    [-112.13465, 34.18296], [-112.14104, 34.1712], [-112.14598, 34.15991], [-112.14973, 34.14388],
+    [-112.15083, 34.12703], [-112.14683, 34.11545], [-112.14443, 34.10716], [-112.14454, 34.08684],
+    [-112.14729, 34.05267], [-112.14624, 34.03128], [-112.13839, 33.99988], [-112.13648, 33.98412],
+    [-112.12807, 33.96846], [-112.14488, 33.92068],
+  ];
+
   function start(client, opts) {
     const timers = [];
     const warn = !!opts.warn;
 
     const tele = warn
-      ? { batteryPct: 11, usableBatteryPct: 10, rangeMi: 28, speedMph: 58, heading: 'SSW', headingDeg: 202, cabinF: 74, outsideF: 99, lat: 35.43, lng: -108.33, state: 'driving', pluggedIn: false, chargerKw: 0, battSegments: 2, warn: true, statusText: 'CHARGE CRITICAL' }
-      : { batteryPct: 72, usableBatteryPct: 71, rangeMi: 214, speedMph: 63, heading: 'WSW', headingDeg: 247, cabinF: 70, outsideF: 94, lat: 34.90, lng: -112.10, state: 'driving', pluggedIn: false, chargerKw: 0, battSegments: 10, warn: false, statusText: 'ALL SYSTEMS NOMINAL' };
+      ? { batteryPct: 11, usableBatteryPct: 10, rangeMi: 28, speedMph: 58, heading: FIX_WARN.heading, headingDeg: FIX_WARN.headingDeg, cabinF: 74, outsideF: 99, lat: FIX_WARN.lat, lng: FIX_WARN.lng, state: 'driving', pluggedIn: false, chargerKw: 0, battSegments: 2, warn: true, statusText: 'CHARGE CRITICAL' }
+      : { batteryPct: 72, usableBatteryPct: 71, rangeMi: 214, speedMph: 63, heading: FIX.heading, headingDeg: FIX.headingDeg, cabinF: 70, outsideF: 94, lat: FIX.lat, lng: FIX.lng, state: 'driving', pluggedIn: false, chargerKw: 0, battSegments: 10, warn: false, statusText: 'ALL SYSTEMS NOMINAL' };
     client.dispatch('telemetry', { ...tele });
     timers.push(setInterval(() => {
       client.dispatch('telemetry', { ...tele, speedMph: Math.max(0, tele.speedMph + Math.round((Math.random() - 0.5) * 4)) });
     }, 1400));
 
-    let dist = 84;
-    let etaMin = 92;
+    const fix = warn ? FIX_WARN : FIX;
+    let dist = 71;
+    let etaMin = 68;
     const baseMap = {
-      currentLeg: 3, totalLegs: 6,
-      legStatus: ['done', 'done', 'current', 'future', 'future', 'future'],
-      vehicle: { svgX: 126, svgY: 342, lat: 34.90, lng: -112.10, onLeg: 3, progress: 0.61 },
-      nextWaypoint: { name: 'MARICOPA, AZ', tag: 'STANDBY' },
-      distToNextMi: dist, etaText: '1:32', standby: { active: false, node: 'MCP' },
+      currentLeg: warn ? 2 : 3, totalLegs: 6,
+      legStatus: warn
+        ? ['done', 'current', 'future', 'future', 'future', 'future']
+        : ['done', 'done', 'current', 'future', 'future', 'future'],
+      vehicle: { svgX: 126, svgY: 342, lat: fix.lat, lng: fix.lng, onLeg: warn ? 2 : 3, progress: 0.61 },
+      nextWaypoint: warn
+        ? { name: 'FLAGSTAFF, AZ', tag: '' }
+        : { name: 'MARICOPA, AZ', tag: 'STANDBY' },
+      distToNextMi: dist, etaText: '1:08', standby: { active: false, node: 'MCP' },
     };
+    if (!warn) client.dispatch('trail', TRAIL);
     client.dispatch('map', { ...baseMap });
     timers.push(setInterval(() => {
       dist = Math.max(0, dist - 1);
@@ -52,7 +72,14 @@
       client.dispatch('map', { ...baseMap, distToNextMi: dist, etaText: `${Math.floor(etaMin / 60)}:${String(etaMin % 60).padStart(2, '0')}` });
     }, 6000));
 
-    client.dispatch('logbook', { states: 5, superchargers: 18, miles: 1847, stationsBypassed: 63, elevationFt: 11200, legsDone: 3, totalLegs: 6 });
+    // internally consistent with the leg-3 / 61% canned position (waypoint 31 = Sunset Point):
+    // 1322 route-mi + side trips = 1486 logged; 8 of 20 SC docked; all 6 states by Flagstaff
+    client.dispatch('logbook', {
+      states: 6, superchargers: 8, miles: 1486, stationsBypassed: 51, elevationFt: 11200,
+      legsDone: 2, totalLegs: 6,
+      routePct: 42, waypoints: 31, totalWaypoints: 58, days: 8,
+      kwhCharged: 388, gasSaved: 190, driveHrs: 23.2, chargeHrs: 3.4,
+    });
 
     if (opts.idle) {
       client.dispatch('transmission:clear', { id: 'idle' });

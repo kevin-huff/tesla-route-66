@@ -7,13 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="overlay-system.css">
 <style>
   html, body { height: 100%; }
   body.ovl { display:flex; align-items:center; justify-content:center; padding:40px; }
   .map { width: 1060px; }
   .map-head {
-    display:flex; align-items:center; gap:14px; margin-bottom: 6px;
+    display:flex; align-items:center; gap:14px; margin-bottom: 8px;
   }
   .map-head .title { font-family:var(--font-display); font-size:20px; color:var(--amber); letter-spacing:.1em; text-shadow:var(--glow-amber-soft); }
   .map-head .sub { font-family:var(--font-label); font-size:13px; letter-spacing:.22em; color:var(--amber-dim); }
@@ -22,40 +23,94 @@
     color:var(--amber-dim); border:1px solid var(--amber-deep); border-radius:5px; padding:5px 10px;
     display:flex; align-items:center; gap:8px; white-space:nowrap;
   }
-  svg { display:block; width:100%; height:auto; }
 
-  /* route legs */
-  .leg { fill:none; stroke-linecap:round; }
-  .leg.done   { stroke:var(--amber); stroke-width:5; filter:drop-shadow(0 0 5px rgba(255,176,0,.6)); }
-  .leg.future { stroke:#5a3e00; stroke-width:4; stroke-dasharray:2 14; opacity:.85; }
-  .leg.current{ stroke:var(--amber-bright); stroke-width:6; filter:drop-shadow(0 0 10px var(--amber-bright)); }
-  .leg.current { stroke-dasharray: 26 18; animation: dash-run 1.4s linear infinite; }
-  @keyframes dash-run { to { stroke-dashoffset:-44; } }
+  /* ---- live map viewport ---- */
+  .viewport {
+    position:relative; height:560px; border-radius:10px; overflow:hidden;
+    background:#0A0806;
+    box-shadow: inset 0 0 0 1px var(--amber-deep), inset 0 0 46px rgba(0,0,0,.6);
+  }
+  #glmap { position:absolute; inset:0; }
+  #glmap .maplibregl-canvas { outline:none; }
+  /* phosphor wash + corner shade over the tiles (panel scanlines already overlay everything) */
+  .veil {
+    position:absolute; inset:0; z-index:4; pointer-events:none; border-radius:10px;
+    background:
+      radial-gradient(120% 95% at 50% 30%, transparent 58%, rgba(0,0,0,.42) 100%),
+      radial-gradient(130% 120% at 50% -10%, rgba(255,176,0,.05), transparent 60%);
+    box-shadow: inset 0 0 0 1px var(--amber-deep);
+  }
 
-  .node-dot { fill:#0a0806; stroke:var(--amber); stroke-width:3; }
-  .node-dot.done { fill:var(--amber); }
-  .node-dot.future { stroke:#6a4a00; }
-  .node-core { fill:var(--amber-bright); }
+  .chip {
+    position:absolute; z-index:5; display:flex; align-items:center; gap:10px;
+    background:rgba(10,8,6,.78); border:1px solid var(--amber-deep); border-radius:6px;
+    font-family:var(--font-label); letter-spacing:.14em; padding:6px 12px;
+  }
+  .chip-coords { top:12px; left:12px; font-size:13px; color:var(--amber); text-shadow:var(--glow-amber-soft); }
+  .chip-coords .chipdiv { width:1px; height:14px; background:var(--amber-deep); }
+  .chip-coords small { color:var(--amber-dim); }
 
-  .node-label { font-family:var(--font-label); fill:var(--amber); font-size:15px; letter-spacing:.12em; text-anchor:middle; }
-  .node-state { font-family:var(--font-label); fill:var(--amber-dim); font-size:11px; letter-spacing:.18em; text-anchor:middle; }
-  .node-label.dim { fill:var(--amber-dim); }
+  .attrib {
+    position:absolute; left:12px; bottom:10px; z-index:5;
+    font-family:var(--font-label); font-size:9px; letter-spacing:.16em; color:rgba(192,138,46,.55);
+  }
 
-  /* STANDBY hex node */
-  .standby-hex { fill:#141008; stroke:var(--amber); stroke-width:3; filter:drop-shadow(0 0 8px rgba(255,176,0,.5)); }
-  .standby-ping { fill:none; stroke:var(--amber-bright); stroke-width:2; transform-origin:center; }
-  .standby-label { font-family:var(--font-display); fill:var(--amber-bright); font-size:13px; letter-spacing:.14em; text-anchor:middle; text-shadow:var(--glow-amber); }
+  .map-offline {
+    position:absolute; inset:0; z-index:3; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-label); font-size:15px; letter-spacing:.34em; color:var(--amber-dim);
+    text-shadow:var(--glow-amber-soft); animation: caret-blink 2.4s steps(1) infinite;
+  }
+  .map-offline[hidden] { display:none; }
 
-  /* vehicle marker */
-  .veh { fill:var(--amber-bright); filter:drop-shadow(0 0 8px var(--amber-bright)); }
-  .veh-ping { fill:none; stroke:var(--amber-bright); stroke-width:2; }
-  #veh { transition: transform 1s linear; }
+  /* ---- vehicle + node markers (DOM markers over the GL canvas) ---- */
+  .veh-marker { position:relative; width:38px; height:38px; }
+  .veh-marker .ping {
+    position:absolute; inset:0; border:2px solid var(--amber-bright); border-radius:50%;
+    animation: veh-ping 1.6s ease-out infinite;
+  }
+  .veh-marker svg { position:absolute; inset:7px; fill:var(--amber-bright); filter:drop-shadow(0 0 7px var(--amber-bright)); }
+  @keyframes veh-ping { 0% { transform:scale(.3); opacity:.95; } 100% { transform:scale(1.45); opacity:0; } }
 
-  /* graticule */
-  .grat { stroke:rgba(255,176,0,.06); stroke-width:1; }
-  .grat-strong { stroke:rgba(255,176,0,.1); stroke-width:1; }
+  .node-marker { position:relative; width:0; height:0; }
+  .node-marker .nm-dot {
+    position:absolute; left:-6px; top:-6px; width:12px; height:12px; border-radius:50%;
+    background:#0a0806; border:2.5px solid var(--amber); box-shadow:0 0 7px rgba(255,176,0,.5);
+  }
+  .node-marker.done .nm-dot { background:var(--amber); }
+  .node-marker.future .nm-dot { border-color:#6a4a00; box-shadow:none; }
+  .node-marker .nm-ping {
+    position:absolute; left:-13px; top:-13px; width:26px; height:26px; border-radius:50%;
+    border:2px solid var(--amber-bright); opacity:0; pointer-events:none;
+  }
+  .node-marker.next .nm-ping { animation: veh-ping 2.2s ease-out infinite; }
+  .node-marker .nm-label {
+    position:absolute; left:0; top:10px; transform:translateX(-50%); white-space:nowrap;
+    font-family:var(--font-label); font-size:12px; letter-spacing:.16em; color:var(--amber);
+    text-shadow:0 0 6px rgba(255,176,0,.45), 0 1px 3px #000; display:none;
+  }
+  .node-marker.next .nm-label, .node-marker.standby .nm-label { display:block; }
+  .node-marker.standby .nm-dot { border-color:var(--amber-bright); box-shadow:0 0 10px rgba(255,204,68,.7); }
 
-  /* readout footer */
+  /* ---- loop inset (whole-route overview, real geometry) ---- */
+  .inset {
+    position:absolute; right:12px; bottom:10px; z-index:5; width:258px;
+    background:rgba(10,8,6,.82); border:1px solid var(--amber-deep); border-radius:8px;
+    padding:7px 8px 5px;
+  }
+  .inset .ihead { font-family:var(--font-label); font-size:9px; letter-spacing:.26em; color:var(--amber-dim); margin:0 0 3px 2px; }
+  .inset svg { display:block; width:100%; height:auto; }
+  .ileg { fill:none; stroke-linecap:round; }
+  .ileg.done    { stroke:var(--amber); stroke-width:2.2; }
+  .ileg.current { stroke:var(--amber-bright); stroke-width:2.6; animation: leg-pulse 1.8s ease-in-out infinite; }
+  .ileg.future  { stroke:#5a3e00; stroke-width:1.6; stroke-dasharray:1.5 4; }
+  .idot { fill:#0a0806; stroke:var(--amber); stroke-width:1.8; }
+  .idot.done { fill:var(--amber); }
+  .idot.future { stroke:#6a4a00; }
+  .ilabel { font-family:var(--font-label); fill:var(--amber-dim); font-size:8.5px; letter-spacing:.12em; text-anchor:middle; }
+  .icar { fill:var(--amber-bright); filter:drop-shadow(0 0 3px var(--amber-bright)); }
+  .icar-ping { fill:none; stroke:var(--amber-bright); stroke-width:1; }
+
+  /* ---- readout footer (unchanged slot in the OBS scene) ---- */
   .map-foot {
     margin-top:8px; display:grid; grid-template-columns: 1fr 1px 1.4fr 1px 1.1fr;
     align-items:center; gap:0;
@@ -77,113 +132,45 @@
       <div class="map-head">
         <span class="title">MISSION MAP</span>
         <span class="sub">ROUTE 66 · SIX-LEG LOOP</span>
-        <span class="badge"><span class="led" style="width:9px;height:9px"></span> FLIGHT PLAN ACTIVE</span>
+        <span class="badge"><span class="led" style="width:9px;height:9px"></span> <span id="plantext">FLIGHT PLAN ACTIVE</span></span>
       </div>
 
-      <svg viewBox="0 0 1000 560" role="img" aria-label="Route 66 six-leg loop map">
-        <defs>
-          <radialGradient id="vign" cx="50%" cy="42%" r="70%">
-            <stop offset="60%" stop-color="transparent"/>
-            <stop offset="100%" stop-color="rgba(0,0,0,.4)"/>
-          </radialGradient>
-        </defs>
+      <div class="viewport">
+        <div id="glmap"></div>
+        <div id="maperr" class="map-offline" hidden>TILE LINK OFFLINE</div>
+        <div class="veil"></div>
+        <div class="chip chip-coords">
+          <span id="coords">--.-----° · ---.-----°</span>
+          <span class="chipdiv"></span>
+          <span id="hdg">HDG ---</span>
+        </div>
+        <div class="attrib">© OPENSTREETMAP · OPENFREEMAP</div>
+        <div class="inset">
+          <div class="ihead">LOOP STATUS</div>
+          <svg id="insetsvg" viewBox="0 0 242 148" role="img" aria-label="Six-leg loop overview"></svg>
+        </div>
+      </div>
 
-        <!-- graticule -->
-        <g>
-          <line class="grat" x1="0" y1="140" x2="1000" y2="140"/>
-          <line class="grat" x1="0" y1="280" x2="1000" y2="280"/>
-          <line class="grat" x1="0" y1="420" x2="1000" y2="420"/>
-          <line class="grat" x1="200" y1="0" x2="200" y2="560"/>
-          <line class="grat" x1="400" y1="0" x2="400" y2="560"/>
-          <line class="grat" x1="600" y1="0" x2="600" y2="560"/>
-          <line class="grat" x1="800" y1="0" x2="800" y2="560"/>
-        </g>
-
-        <!-- LEGS: SPR(868,139) AMA(528,262) FLG(136,262) MCP(120,391) ELP(340,471) GAR(736,403) -->
-        <!-- future legs first (under) -->
-        <path class="leg future" d="M120,391 L340,471" id="leg4"/>   <!-- L4 MCP->ELP -->
-        <path class="leg future" d="M340,471 L736,403" id="leg5"/>   <!-- L5 ELP->GAR -->
-        <path class="leg future" d="M736,403 L868,139" id="leg6"/>   <!-- L6 GAR->SPR -->
-        <!-- done legs -->
-        <path class="leg done" d="M868,139 L528,262" id="leg1"/>     <!-- L1 SPR->AMA -->
-        <path class="leg done" d="M528,262 L136,262" id="leg2"/>     <!-- L2 AMA->FLG -->
-        <!-- current leg L3 FLG->MCP -->
-        <path class="leg current" d="M136,262 L120,391" id="leg3"/>
-
-        <!-- nodes -->
-        <!-- SPR -->
-        <g>
-          <circle class="node-dot done" cx="868" cy="139" r="9"/>
-          <text class="node-label" x="868" y="120">SPRINGFIELD</text>
-          <text class="node-state" x="868" y="106">START · END</text>
-        </g>
-        <!-- AMA -->
-        <g>
-          <circle class="node-dot done" cx="528" cy="262" r="9" id="dotAMA"/>
-          <text class="node-label" x="528" y="240">AMARILLO</text>
-        </g>
-        <!-- FLG -->
-        <g>
-          <circle class="node-dot done" cx="136" cy="262" r="9" id="dotFLG"/>
-          <text class="node-label" x="146" y="240">FLAGSTAFF</text>
-        </g>
-        <!-- ELP -->
-        <g>
-          <circle class="node-dot future" cx="340" cy="471" r="8" id="dotELP"/>
-          <text class="node-label dim" x="340" y="500">EL PASO</text>
-        </g>
-        <!-- GAR -->
-        <g>
-          <circle class="node-dot future" cx="736" cy="403" r="8" id="dotGAR"/>
-          <text class="node-label dim" x="736" y="432">GARLAND</text>
-        </g>
-
-        <!-- MARICOPA STANDBY node -->
-        <g transform="translate(120,391)">
-          <circle class="standby-ping" cx="0" cy="0" r="16">
-            <animate attributeName="r" values="16;34" dur="2.2s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.8;0" dur="2.2s" repeatCount="indefinite"/>
-          </circle>
-          <polygon class="standby-hex" points="0,-15 13,-7.5 13,7.5 0,15 -13,7.5 -13,-7.5"/>
-          <!-- pause glyph -->
-          <rect x="-5" y="-6" width="3.5" height="12" fill="var(--amber-bright)"/>
-          <rect x="1.5" y="-6" width="3.5" height="12" fill="var(--amber-bright)"/>
-          <text class="standby-label" x="0" y="40">STANDBY · 1 WEEK</text>
-          <text class="node-label" x="0" y="58" style="fill:var(--amber-dim)">MARICOPA, AZ</text>
-        </g>
-
-        <!-- vehicle marker on current leg ~62% -->
-        <g id="veh" transform="translate(126,342)">
-          <circle class="veh-ping" cx="0" cy="0" r="9">
-            <animate attributeName="r" values="9;22" dur="1.6s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.9;0" dur="1.6s" repeatCount="indefinite"/>
-          </circle>
-          <circle class="veh" cx="0" cy="0" r="6"/>
-        </g>
-
-        <rect x="0" y="0" width="1000" height="560" fill="url(#vign)" pointer-events="none"/>
-      </svg>
-
-      <div class="rule" style="margin:4px 0 2px"></div>
+      <div class="rule" style="margin:8px 0 2px"></div>
       <div class="map-foot">
         <div class="fcell">
           <div class="label">CURRENT LEG</div>
-          <div class="val">LEG <span class="num" id="curleg" style="font-size:26px">03</span><small>/06</small></div>
+          <div class="val">LEG <span class="num" id="curleg" style="font-size:26px">--</span><small>/06</small></div>
         </div>
         <div class="fdiv"></div>
         <div class="fcell">
           <div class="label">NEXT WAYPOINT</div>
-          <div class="val" id="nextwp">MARICOPA, AZ <small>· STANDBY</small></div>
+          <div class="val" id="nextwp">ACQUIRING ROUTE…</div>
         </div>
         <div class="fdiv"></div>
         <div class="fcell" style="display:flex; gap:26px;">
           <div>
             <div class="label">DIST TO NEXT</div>
-            <div><span class="num" id="dist">84</span><span class="unit">MI</span></div>
+            <div><span class="num" id="dist">--</span><span class="unit">MI</span></div>
           </div>
           <div>
             <div class="label">ETA</div>
-            <div><span class="num" id="eta">1:32</span></div>
+            <div><span class="num" id="eta">--:--</span></div>
           </div>
         </div>
       </div>
@@ -191,28 +178,286 @@
   </div>
 
 <script src="config/overlay-config.js"></script>
+<script src="config/route-geometry.js"></script>
+<script src="config/map-style-amber.js"></script>
+<script src="vendor/maplibre-gl.js"></script>
 <script src="js/demo-data.js"></script>
 <script src="js/telemetry-client.js"></script>
 <script>
   const client = window.R66;
   const $ = (id) => document.getElementById(id);
-  // a node fills solid (done) when the leg that arrives at it completes
-  const NODE_BY_DONE_LEG = { 1: 'dotAMA', 2: 'dotFLG', 4: 'dotELP', 5: 'dotGAR' };
+  const ROUTE = window.R66_ROUTE || null;
+  const MCFG = Object.assign({
+    tilesUrl: 'https://tiles.openfreemap.org/planet',
+    glyphsUrl: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+    zoomBySpeed: [[3, 13.0], [25, 12.2], [45, 11.4], [999, 10.6]],
+    zoomDeadband: 0.35,
+    trailMinMoveM: 120,
+    trailMaxPoints: 3500,
+  }, (window.R66_CONFIG && window.R66_CONFIG.map) || {});
+  // each leg arrives at one node; that node fills solid when the leg completes
+  const NODE_ARRIVAL_LEG = { AMA: 1, FLG: 2, MCP: 3, ELP: 4, GAR: 5, SPR: 6 };
 
-  client.on('map', (m) => {
-    if (!m) return;
+  // meters between two [lng,lat] points (equirectangular — fine at trail scale)
+  function moveM(a, b) {
+    const ky = 110540;
+    const kx = 111320 * Math.cos(((a[1] + b[1]) / 2) * Math.PI / 180);
+    return Math.hypot((a[0] - b[0]) * kx, (a[1] - b[1]) * ky);
+  }
+  const fmtLat = (v) => `${Math.abs(v).toFixed(5)}°${v >= 0 ? 'N' : 'S'}`;
+  const fmtLng = (v) => `${Math.abs(v).toFixed(5)}°${v >= 0 ? 'E' : 'W'}`;
+
+  /* =================== live GL map (guarded: needs WebGL) =================== */
+  const glOK = (() => {
+    try {
+      if (!window.maplibregl || !window.R66_MAP_STYLE) return false;
+      const c = document.createElement('canvas');
+      return !!(c.getContext && (c.getContext('webgl2') || c.getContext('webgl')));
+    } catch { return false; }
+  })();
+
+  let map = null, mapReady = false, vehMarker = null, vehAdded = false;
+  const nodeMarkers = {};
+  let trailCoords = [];
+  let curZoom = null, lastFixAt = 0, haveFix = false;
+  const chase = client.params.has('rotate'); // heading-up chase cam (default north-up)
+
+  function legFC() {
+    return {
+      type: 'FeatureCollection',
+      features: (ROUTE ? ROUTE.legs : []).map((l) => ({
+        type: 'Feature',
+        properties: { leg: l.leg },
+        geometry: { type: 'LineString', coordinates: l.coords },
+      })),
+    };
+  }
+  const legFilter = (legs) => ['in', ['get', 'leg'], ['literal', legs.length ? legs : [-1]]];
+
+  if (glOK) {
+    map = new maplibregl.Map({
+      container: 'glmap',
+      style: window.R66_MAP_STYLE({ tilesUrl: MCFG.tilesUrl, glyphsUrl: MCFG.glyphsUrl }),
+      center: [-103.3, 35.0],
+      zoom: 4.4,
+      attributionControl: false,
+      interactive: false,
+    });
+    map.on('error', (e) => console.warn('[map]', e && e.error && e.error.message));
+    // style fetch dead (no network)? the inset + footer keep flying the plan
+    setTimeout(() => { if (!map.isStyleLoaded()) $('maperr').hidden = false; }, 8000);
+
+    const C = window.R66_MAP_COLORS;
+    map.on('load', () => {
+      $('maperr').hidden = true;
+      map.addSource('r66legs', { type: 'geojson', data: legFC() });
+      map.addSource('r66trail', { type: 'geojson', data: trailGeo() });
+
+      map.addLayer({ id: 'r66-future', type: 'line', source: 'r66legs', filter: legFilter([]),
+        paint: { 'line-color': '#5a3e00', 'line-width': 3, 'line-dasharray': [1.2, 2.4], 'line-opacity': .9 } });
+      map.addLayer({ id: 'r66-done-glow', type: 'line', source: 'r66legs', filter: legFilter([]),
+        paint: { 'line-color': C.AMBER, 'line-width': 10, 'line-blur': 6, 'line-opacity': .16 } });
+      map.addLayer({ id: 'r66-done', type: 'line', source: 'r66legs', filter: legFilter([]),
+        paint: { 'line-color': C.AMBER, 'line-width': 3.2, 'line-opacity': .85 } });
+      map.addLayer({ id: 'r66-cur-glow', type: 'line', source: 'r66legs', filter: legFilter([]),
+        paint: { 'line-color': C.AMBER_BRIGHT, 'line-width': 13, 'line-blur': 7, 'line-opacity': .2 } });
+      map.addLayer({ id: 'r66-cur', type: 'line', source: 'r66legs', filter: legFilter([]),
+        paint: { 'line-color': C.AMBER_BRIGHT, 'line-width': 4, 'line-opacity': .95 } });
+      map.addLayer({ id: 'r66-trail', type: 'line', source: 'r66trail',
+        paint: { 'line-color': C.AMBER_BRIGHT, 'line-width': 2.2, 'line-opacity': .9 } });
+
+      // breathing bloom on the active leg — the CRT is alive
+      let ph = 0;
+      setInterval(() => {
+        if (!map.getLayer('r66-cur-glow')) return;
+        ph += 0.42;
+        map.setPaintProperty('r66-cur-glow', 'line-opacity', 0.14 + 0.12 * (0.5 + 0.5 * Math.sin(ph)));
+      }, 120);
+
+      // six mission nodes; label shows on the next waypoint only (tiles label the rest)
+      if (ROUTE) {
+        for (const [key, n] of Object.entries(ROUTE.nodes)) {
+          const el = document.createElement('div');
+          el.className = 'node-marker future';
+          el.innerHTML = `<div class="nm-ping"></div><div class="nm-dot"></div><div class="nm-label">${n.name}, ${n.state}</div>`;
+          nodeMarkers[key] = new maplibregl.Marker({ element: el })
+            .setLngLat([n.lng, n.lat]).addTo(map);
+        }
+      }
+
+      mapReady = true;
+      if (lastMapMsg) paintMap(lastMapMsg);   // repaint queued state
+      else if (ROUTE) fitWholeRoute();
+    });
+
+    const el = document.createElement('div');
+    el.className = 'veh-marker';
+    el.innerHTML = '<div class="ping"></div><svg viewBox="0 0 24 24"><path d="M12 1.5 L20.5 22 L12 16.6 L3.5 22 Z"/></svg>';
+    vehMarker = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' });
+  }
+
+  function trailGeo() {
+    return { type: 'Feature', properties: {},
+      geometry: { type: 'LineString', coordinates: trailCoords.length > 1 ? trailCoords : [] } };
+  }
+  function pushTrail(pt) {
+    const lastPt = trailCoords[trailCoords.length - 1];
+    if (lastPt && moveM(lastPt, pt) < MCFG.trailMinMoveM) return;
+    trailCoords.push(pt);
+    if (trailCoords.length > MCFG.trailMaxPoints) trailCoords.splice(0, trailCoords.length - MCFG.trailMaxPoints);
+    if (mapReady && map.getSource('r66trail')) map.getSource('r66trail').setData(trailGeo());
+  }
+
+  function fitWholeRoute() {
+    let minX = 180, minY = 90, maxX = -180, maxY = -90;
+    for (const l of ROUTE.legs) for (const [x, y] of l.coords) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+    map.fitBounds([[minX, minY], [maxX, maxY]], { padding: 60, duration: 0 });
+  }
+
+  function zoomFor(mph) {
+    for (const [maxMph, z] of MCFG.zoomBySpeed) if (mph <= maxMph) return z;
+    return MCFG.zoomBySpeed[MCFG.zoomBySpeed.length - 1][1];
+  }
+
+  function followCam(lng, lat, mph, headingDeg) {
+    const zt = zoomFor(mph || 0);
+    if (curZoom == null || Math.abs(zt - curZoom) > MCFG.zoomDeadband) curZoom = zt;
+    const now = Date.now();
+    const dt = lastFixAt ? Math.min(2500, Math.max(280, now - lastFixAt)) : 0;
+    lastFixAt = now;
+    const view = { center: [lng, lat], zoom: curZoom };
+    if (chase && headingDeg != null) view.bearing = headingDeg;
+    if (!haveFix) { haveFix = true; map.jumpTo(view); }
+    else map.easeTo(Object.assign(view, { duration: dt, easing: (t) => t, essential: true }));
+  }
+
+  /* ====================== loop inset (plain SVG, no GL) ====================== */
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const insetOK = !!(ROUTE && document.createElementNS && $('insetsvg'));
+  let iproj = null, icar = null, icarPing = null;
+  const ilegEls = {}, idotEls = {};
+
+  if (insetOK) buildInset();
+  function buildInset() {
+    const W = 242, H = 148, PAD = 16;
+    const midLat = 34.5 * Math.PI / 180;
+    const kx = Math.cos(midLat);
+    let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    for (const l of ROUTE.legs) for (const [lng, lat] of l.coords) {
+      const x = lng * kx;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (lat < minY) minY = lat; if (lat > maxY) maxY = lat;
+    }
+    const s = Math.min((W - 2 * PAD) / (maxX - minX), (H - 2 * PAD) / (maxY - minY));
+    const ox = (W - s * (maxX - minX)) / 2, oy = (H - s * (maxY - minY)) / 2;
+    iproj = (lng, lat) => [ox + (lng * kx - minX) * s, H - (oy + (lat - minY) * s)];
+
+    const svg = $('insetsvg');
+    for (const l of ROUTE.legs) {
+      let d = '';
+      for (let i = 0; i < l.coords.length; i += 6) {
+        const [x, y] = iproj(l.coords[i][0], l.coords[i][1]);
+        d += (d ? 'L' : 'M') + x.toFixed(1) + ',' + y.toFixed(1);
+      }
+      const [ex, ey] = iproj(l.coords[l.coords.length - 1][0], l.coords[l.coords.length - 1][1]);
+      d += 'L' + ex.toFixed(1) + ',' + ey.toFixed(1);
+      const p = document.createElementNS(SVGNS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('class', 'ileg future');
+      svg.appendChild(p);
+      ilegEls[l.leg] = p;
+    }
+    for (const [key, n] of Object.entries(ROUTE.nodes)) {
+      const [x, y] = iproj(n.lng, n.lat);
+      const c = document.createElementNS(SVGNS, 'circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3.2);
+      c.setAttribute('class', 'idot future');
+      svg.appendChild(c);
+      idotEls[key] = c;
+      const t = document.createElementNS(SVGNS, 'text');
+      t.setAttribute('x', x); t.setAttribute('y', y < H / 2 ? y - 7 : y + 14);
+      t.setAttribute('class', 'ilabel');
+      t.textContent = key;
+      svg.appendChild(t);
+    }
+    icarPing = document.createElementNS(SVGNS, 'circle');
+    icarPing.setAttribute('class', 'icar-ping'); icarPing.setAttribute('r', 3);
+    const a1 = document.createElementNS(SVGNS, 'animate');
+    a1.setAttribute('attributeName', 'r'); a1.setAttribute('values', '3;9'); a1.setAttribute('dur', '1.8s'); a1.setAttribute('repeatCount', 'indefinite');
+    const a2 = document.createElementNS(SVGNS, 'animate');
+    a2.setAttribute('attributeName', 'opacity'); a2.setAttribute('values', '.9;0'); a2.setAttribute('dur', '1.8s'); a2.setAttribute('repeatCount', 'indefinite');
+    icarPing.appendChild(a1); icarPing.appendChild(a2);
+    svg.appendChild(icarPing);
+    icar = document.createElementNS(SVGNS, 'circle');
+    icar.setAttribute('class', 'icar'); icar.setAttribute('r', 2.6);
+    svg.appendChild(icar);
+  }
+
+  /* ============================ message wiring ============================ */
+  let lastMapMsg = null, lastStatusStr = '', lastVehPt = null;
+
+  function paintMap(m) {
     const status = m.legStatus || [];
-    for (let i = 1; i <= 6; i++) {
-      const el = $('leg' + i);
-      if (el) el.setAttribute('class', 'leg ' + (status[i - 1] || 'future'));
-    }
-    for (const [leg, id] of Object.entries(NODE_BY_DONE_LEG)) {
-      const dot = $(id);
-      if (dot) dot.setAttribute('class', 'node-dot ' + (status[Number(leg) - 1] === 'done' ? 'done' : 'future'));
-    }
-    const veh = $('veh');
-    if (veh && m.vehicle) veh.setAttribute('transform', `translate(${m.vehicle.svgX},${m.vehicle.svgY})`);
+    const statusStr = status.join(',');
+    const done = [], future = [], current = [];
+    status.forEach((st, idx) => {
+      (st === 'done' ? done : st === 'current' ? current : future).push(idx + 1);
+    });
 
+    if (mapReady && statusStr !== lastStatusStr) {
+      map.setFilter('r66-future', legFilter(future));
+      map.setFilter('r66-done', legFilter(done));
+      map.setFilter('r66-done-glow', legFilter(done));
+      map.setFilter('r66-cur', legFilter(current));
+      map.setFilter('r66-cur-glow', legFilter(current));
+    }
+
+    // node + inset statuses. A node's leg is the one that arrives at it:
+    // done -> reached (filled), current -> it's the next destination (ping + label).
+    for (const [key, leg] of Object.entries(NODE_ARRIVAL_LEG)) {
+      const st = status[leg - 1];
+      const filled = st === 'done' || key === 'SPR'; // home plate always lit (START · END)
+      const parts = ['node-marker', filled ? 'done' : 'future'];
+      if (st === 'current') parts.push('next');
+      if (m.standby && m.standby.active && m.standby.node === key) parts.push('standby');
+      const nm = nodeMarkers[key];
+      if (nm) nm.getElement().className = parts.join(' ');
+      const dot = idotEls[key];
+      if (dot) dot.setAttribute('class', 'idot ' + (filled ? 'done' : 'future'));
+    }
+    for (const [leg, el] of Object.entries(ilegEls)) {
+      el.setAttribute('class', 'ileg ' + (status[Number(leg) - 1] || 'future'));
+    }
+    if (statusStr !== lastStatusStr) lastStatusStr = statusStr;
+
+    // vehicle: GL marker + camera + trail + inset dot
+    const v = m.vehicle;
+    if (v && v.lat != null && v.lng != null) {
+      const pt = [v.lng, v.lat];
+      if (lastVehPt && moveM(lastVehPt, pt) > 50000) { // replay loop reset / seek: teleport
+        trailCoords = [];
+        haveFix = false;
+        if (mapReady && map.getSource('r66trail')) map.getSource('r66trail').setData(trailGeo());
+      }
+      lastVehPt = pt;
+      if (glOK) {
+        vehMarker.setLngLat(pt);
+        if (!vehAdded) { vehMarker.addTo(map); vehAdded = true; }
+        const t = client.last('telemetry') || {};
+        followCam(v.lng, v.lat, t.speedMph, t.headingDeg);
+      }
+      pushTrail(pt);
+      if (insetOK && iproj) {
+        const [x, y] = iproj(v.lng, v.lat);
+        icar.setAttribute('cx', x); icar.setAttribute('cy', y);
+        icarPing.setAttribute('cx', x); icarPing.setAttribute('cy', y);
+      }
+    }
+
+    // footer + badge
     if (m.currentLeg != null) $('curleg').textContent = String(m.currentLeg).padStart(2, '0');
     if (m.nextWaypoint) {
       $('nextwp').innerHTML =
@@ -220,6 +465,33 @@
     }
     if (m.distToNextMi != null) $('dist').textContent = m.distToNextMi;
     if (m.etaText) $('eta').textContent = m.etaText;
+    $('plantext').textContent = m.standby && m.standby.active
+      ? 'STANDBY · MARICOPA, AZ'
+      : 'FLIGHT PLAN ACTIVE';
+  }
+
+  client.on('map', (m) => {
+    if (!m) return;
+    lastMapMsg = m;
+    paintMap(m);
+  });
+
+  client.on('telemetry', (t) => {
+    if (!t) return;
+    if (t.lat != null && t.lng != null) {
+      $('coords').textContent = `${fmtLat(t.lat)} · ${fmtLng(t.lng)}`;
+    }
+    if (t.headingDeg != null) {
+      $('hdg').textContent = `HDG ${String(Math.round(t.headingDeg)).padStart(3, '0')}° ${t.heading || ''}`.trim();
+      if (vehMarker) vehMarker.setRotation(t.headingDeg);
+    }
+  });
+
+  // bridge snapshot carries the persisted breadcrumb (survives OBS refresh mid-leg)
+  client.on('trail', (coords) => {
+    if (!Array.isArray(coords)) return;
+    trailCoords = coords.slice();
+    if (mapReady && map.getSource('r66trail')) map.getSource('r66trail').setData(trailGeo());
   });
 </script>
 </body>
