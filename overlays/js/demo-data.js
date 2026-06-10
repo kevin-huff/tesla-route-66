@@ -41,14 +41,24 @@
   function start(client, opts) {
     const timers = [];
     const warn = !!opts.warn;
+    const charge = !!opts.charge;
 
+    // margin story: normal = comfortable cushion to Phoenix SC; warn = underwater to Holbrook
     const tele = warn
-      ? { batteryPct: 11, usableBatteryPct: 10, rangeMi: 28, speedMph: 58, heading: FIX_WARN.heading, headingDeg: FIX_WARN.headingDeg, cabinF: 74, outsideF: 99, lat: FIX_WARN.lat, lng: FIX_WARN.lng, state: 'driving', pluggedIn: false, chargerKw: 0, battSegments: 2, warn: true, statusText: 'CHARGE CRITICAL' }
-      : { batteryPct: 72, usableBatteryPct: 71, rangeMi: 214, speedMph: 63, heading: FIX.heading, headingDeg: FIX.headingDeg, cabinF: 70, outsideF: 94, lat: FIX.lat, lng: FIX.lng, state: 'driving', pluggedIn: false, chargerKw: 0, battSegments: 10, warn: false, statusText: 'ALL SYSTEMS NOMINAL' };
+      ? { batteryPct: 11, usableBatteryPct: 10, rangeMi: 28, speedMph: 58, heading: FIX_WARN.heading, headingDeg: FIX_WARN.headingDeg, cabinF: 74, outsideF: 99, lat: FIX_WARN.lat, lng: FIX_WARN.lng, state: 'driving', pluggedIn: false, chargerKw: 0, battSegments: 2, warn: true, statusText: 'CHARGE CRITICAL', nextSc: { id: 'sc_holbrook', place: 'HOLBROOK, AZ', mi: 118 }, marginMi: -90, marginWarn: true, timeToFullMin: null, chargeLimitPct: 90 }
+      : charge
+      ? { batteryPct: 64, usableBatteryPct: 63, rangeMi: 190, speedMph: 0, heading: FIX.heading, headingDeg: FIX.headingDeg, cabinF: 71, outsideF: 96, lat: FIX.lat, lng: FIX.lng, state: 'charging', pluggedIn: true, chargerKw: 150, battSegments: 9, warn: false, statusText: 'ALL SYSTEMS NOMINAL', nextSc: { id: 'sc_phoenix', place: 'PHOENIX, AZ', mi: 0 }, marginMi: 190, marginWarn: false, timeToFullMin: 26, chargeLimitPct: 90 }
+      : { batteryPct: 72, usableBatteryPct: 71, rangeMi: 214, speedMph: 63, heading: FIX.heading, headingDeg: FIX.headingDeg, cabinF: 70, outsideF: 94, lat: FIX.lat, lng: FIX.lng, state: 'driving', pluggedIn: false, chargerKw: 0, battSegments: 10, warn: false, statusText: 'ALL SYSTEMS NOMINAL', nextSc: { id: 'sc_phoenix', place: 'PHOENIX, AZ', mi: 31 }, marginMi: 183, marginWarn: false, timeToFullMin: null, chargeLimitPct: 90 };
     client.dispatch('telemetry', { ...tele });
     timers.push(setInterval(() => {
-      client.dispatch('telemetry', { ...tele, speedMph: Math.max(0, tele.speedMph + Math.round((Math.random() - 0.5) * 4)) });
+      client.dispatch('telemetry', { ...tele, speedMph: Math.max(0, tele.speedMph + (tele.speedMph ? Math.round((Math.random() - 0.5) * 4) : 0)) });
     }, 1400));
+
+    // canned now-playing (the obvious choice)
+    client.dispatch('nowplaying', {
+      title: '(Get Your Kicks On) Route 66', artist: 'Chuck Berry', album: 'New Juke Box Hits',
+      artUrl: null, durationSec: 169, progressSec: 47, playing: true, receivedAt: Date.now(),
+    });
 
     const fix = warn ? FIX_WARN : FIX;
     let dist = 71;

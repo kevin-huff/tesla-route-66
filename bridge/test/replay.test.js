@@ -61,6 +61,16 @@ test('demo replay completes a full loop and emits the whole contract', () => {
   const txIds = events.filter((e) => e.type === 'transmission').map((e) => e.data.id);
   assert.equal(new Set(txIds).size, txIds.length, 'no duplicate transmissions');
   assert.equal(txIds.length, route.route.length, 'one transmission per landmark');
+
+  // telemetry contract: SC margin while driving, charge fields while docked
+  const teles = events.filter((e) => e.type === 'telemetry').map((e) => e.data);
+  const withMargin = teles.find((t) => t.state === 'driving' && t.nextSc && t.marginMi != null);
+  assert.ok(withMargin, 'driving frames carry nextSc + marginMi');
+  assert.ok(withMargin.nextSc.mi >= 0 && typeof withMargin.nextSc.place === 'string');
+  const docked = teles.find((t) => t.state === 'charging');
+  assert.ok(docked, 'charging frames emitted');
+  assert.equal(docked.chargeLimitPct, 90);
+  assert.ok(docked.timeToFullMin != null && docked.timeToFullMin >= 0);
 });
 
 test('all six legs complete, once each', () => {

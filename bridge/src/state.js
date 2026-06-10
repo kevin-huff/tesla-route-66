@@ -50,5 +50,6 @@ export function createState(mode, totalLegs = 6) {
       chargeHrs: 0,
     },
     lastTransmission: null,
+    nowPlaying: null, // Spotify via Streamer.bot POST /api/nowplaying
   };
 }

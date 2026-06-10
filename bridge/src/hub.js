@@ -28,6 +28,29 @@ const esc = (s) =>
 // escape, then re-allow only <b>/</b> (alert kicker/detail carry intentional bold)
 const allowBold = (s) => esc(s).replace(/&lt;(\/?)b&gt;/g, '<$1b>');
 
+// Normalize a now-playing POST body. Accepts our canonical names AND the raw variable
+// names Tawmae's Spotify x Streamer.bot extension exposes (%trackName%, %artists%,
+// %coverImageURL%, %albumName%, %durationMs%, %progressMs%, %isPlaying%), including
+// C#-stringified booleans ("True"/"False") and millisecond durations.
+export function parseNowPlaying(b = {}) {
+  const pick = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== '');
+  const art = String(pick(b.artUrl, b.coverImageURL, b.albumArtUrl, b.image) ?? '');
+  const secs = (sec, msec) =>
+    sec !== undefined && sec !== null && sec !== ''
+      ? Number(sec) || 0
+      : Math.round((Number(msec) || 0) / 1000);
+  const playingRaw = pick(b.playing, b.isPlaying);
+  return {
+    title: esc(pick(b.title, b.trackName, b.song, b.track) ?? ''),
+    artist: esc(pick(b.artist, b.artists) ?? ''),
+    album: esc(pick(b.album, b.albumName) ?? ''),
+    artUrl: /^https?:\/\//.test(art) ? art : null,
+    durationSec: secs(pick(b.durationSec, b.duration), b.durationMs),
+    progressSec: secs(pick(b.progressSec, b.progress), b.progressMs),
+    playing: playingRaw === undefined || !(playingRaw === false || String(playingRaw).toLowerCase() === 'false'),
+  };
+}
+
 export function createHub({ config, state, store, route, replay }) {
   const startedAt = Date.now();
   let seq = 0;
@@ -48,6 +71,7 @@ export function createHub({ config, state, store, route, replay }) {
       logbook: state.logbook,
       lastTransmission: state.lastTransmission,
       trail: store.get().trail || [], // breadcrumb seed for the map overlay
+      nowPlaying: state.nowPlaying,
     };
   }
 
@@ -148,6 +172,20 @@ export function createHub({ config, state, store, route, replay }) {
         .generateNow()
         .then((r) => json(res, r.ok ? 200 : 502, r))
         .catch((e) => json(res, 500, { ok: false, error: String((e && e.message) || e) }));
+    }
+    if (p === '/api/nowplaying') {
+      // Spotify now-playing ingress (Streamer.bot/Tawmae fires this on track change /
+      // play / pause). parseNowPlaying tolerates the extension's raw variable names.
+      if (req.method !== 'POST') return json(res, 200, state.nowPlaying || { idle: true });
+      return readBody(req).then((b) => {
+        const np = {
+          ...parseNowPlaying(b),
+          receivedAt: Date.now(), // overlay self-advances progress from here
+        };
+        state.nowPlaying = np;
+        broadcast('nowplaying', np);
+        json(res, 200, { ok: true, nowPlaying: np });
+      });
     }
     if (p === '/api/alert' && req.method === 'POST') {
       return readBody(req).then((b) => {

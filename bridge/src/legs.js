@@ -74,6 +74,25 @@ export class Route {
     this.roadPath = roadPath;
   }
 
+  // next planned supercharger at/after a position (meters along the loop), with
+  // road-miles to reach it — feeds the telemetry console's range-margin readout
+  nextSuperchargerAhead(routeDistM) {
+    if (!this.roadPath || routeDistM == null) return null;
+    let best = null;
+    for (const lm of this.route) {
+      if (lm.type !== 'supercharger') continue;
+      const d = this.roadPath.distById.get(lm.id);
+      if (d == null || d < routeDistM - 500) continue; // already behind us
+      if (!best || d < best.d) best = { lm, d };
+    }
+    if (!best) return null; // past the last supercharger — home stretch
+    return {
+      id: best.lm.id,
+      place: splitHeader(best.lm.header, best.lm.name).place,
+      mi: round(kmToMi((best.d - routeDistM) / 1000), 0),
+    };
+  }
+
   landmark(id) {
     return this.byId.get(id) || null;
   }

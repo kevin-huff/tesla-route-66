@@ -83,6 +83,11 @@ export function createReplaySource({ route, store, config, roadPath }) {
     return a + (b - a) * f;
   }
 
+  function timeToFullH() {
+    if (batt >= CHARGE_TARGET) return 0;
+    return (Math.ceil((CHARGE_TARGET - batt) / CHARGE_PER_TICK) * simSecPerTick) / 3600;
+  }
+
   function tickOnce() {
     let speedMph = 0;
     let state = 'online';
@@ -158,6 +163,8 @@ export function createReplaySource({ route, store, config, roadPath }) {
       headingDeg,
       standbyHint: state === 'asleep',
       chargeEnergyAddedKwh: chargeSessionKwh,
+      timeToFullChargeH: state === 'charging' ? timeToFullH() : 0,
+      chargeLimitSoc: CHARGE_TARGET,
       dtSec: simSecPerTick, // compressed sim-time per tick, so drive/charge hours accrue honestly
     });
   }

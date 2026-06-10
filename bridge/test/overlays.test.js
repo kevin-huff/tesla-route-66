@@ -108,6 +108,7 @@ test('telemetry overlay maps live telemetry fields to the DOM', () => {
     batteryPct: 47, usableBatteryPct: 46, rangeMi: 151, speedMph: 55, heading: 'NE', headingDeg: 45,
     cabinF: 68, outsideF: 88, battSegments: 7, warn: false, statusText: 'ALL SYSTEMS NOMINAL',
     state: 'driving', pluggedIn: false,
+    nextSc: { id: 'sc_tulsa', place: 'TULSA, OK', mi: 62 }, marginMi: 89, marginWarn: false,
   };
   win.R66.dispatch('telemetry', frame); // first frame -> count-up reveal
   win.R66.dispatch('telemetry', { ...frame }); // second -> direct set (synchronous)
@@ -118,10 +119,73 @@ test('telemetry overlay maps live telemetry fields to the DOM', () => {
   assert.equal(byId.heading.textContent, 'NE');
   assert.ok(!document.body.classList.contains('warn'));
 
+  // SC margin substat
+  assert.equal(byId.scmi.textContent, '62');
+  assert.equal(byId.scplace.textContent, 'TULSA');
+  assert.equal(byId.margin.textContent, '+89');
+  assert.ok(!byId.margin.classList.contains('low'));
+  win.R66.dispatch('telemetry', { ...frame, marginMi: 12, marginWarn: true });
+  assert.ok(byId.margin.classList.contains('low'));
+  assert.equal(byId.margin.textContent, '+12');
+
   win.R66.dispatch('telemetry', { ...frame, warn: true, statusText: 'CHARGE CRITICAL' });
   assert.ok(document.body.classList.contains('warn'));
   assert.equal(byId.statustext.textContent, 'CHARGE CRITICAL');
   assert.ok(byId.console.classList.contains('panel--warn'));
+});
+
+test('telemetry console state modes: charging and idle/standby', () => {
+  const { byId, document, win } = loadOverlay('telemetry.html');
+  const base = {
+    batteryPct: 64, usableBatteryPct: 63, rangeMi: 190, speedMph: 0, heading: 'S', headingDeg: 186,
+    cabinF: 71, outsideF: 96, battSegments: 9, warn: false, statusText: 'ALL SYSTEMS NOMINAL',
+    nextSc: { id: 'sc_phoenix', place: 'PHOENIX, AZ', mi: 0 }, marginMi: 190, marginWarn: false,
+  };
+
+  // CHARGE mode: NAV bay relabels, kW + time-to-limit + target render
+  win.R66.dispatch('telemetry', { ...base, state: 'charging', pluggedIn: true, chargerKw: 150, timeToFullMin: 26, chargeLimitPct: 90 });
+  assert.ok(document.body.classList.contains('charging'));
+  assert.equal(byId.navlabel.textContent, 'CHARGE');
+  assert.equal(byId.statustext.textContent, 'DOCKED · CHARGING');
+  assert.equal(byId.kw.textContent, '150');
+  assert.equal(byId.fullin.textContent, '0:26');
+  assert.equal(byId.target.textContent, '90');
+
+  // IDLE: asleep overnight
+  win.R66.dispatch('telemetry', { ...base, state: 'asleep', pluggedIn: false, chargerKw: 0 });
+  assert.ok(!document.body.classList.contains('charging'));
+  assert.ok(document.body.classList.contains('idle'));
+  assert.equal(byId.navlabel.textContent, 'NAV');
+  assert.equal(byId.statustext.textContent, 'SYSTEMS IDLE');
+
+  // STANDBY: map channel flags the Maricopa week -> idle dress is labeled
+  win.R66.dispatch('map', { standby: { active: true, node: 'MCP' } });
+  win.R66.dispatch('telemetry', { ...base, state: 'asleep', pluggedIn: false, chargerKw: 0 });
+  assert.equal(byId.statustext.textContent, 'STANDBY · MARICOPA, AZ');
+
+  // wake back up
+  win.R66.dispatch('map', { standby: { active: false, node: 'MCP' } });
+  win.R66.dispatch('telemetry', { ...base, state: 'driving', speedMph: 64 });
+  assert.ok(!document.body.classList.contains('idle'));
+  assert.equal(byId.statustext.textContent, 'ALL SYSTEMS NOMINAL');
+});
+
+test('telemetry AUDIO strip renders now-playing and falls back to NO CARRIER', () => {
+  const { byId, win } = loadOverlay('telemetry.html');
+  assert.ok(byId.audiobar.classList.contains('nocarrier')); // boots idle
+
+  win.R66.dispatch('nowplaying', {
+    title: '(Get Your Kicks On) Route 66', artist: 'Chuck Berry',
+    durationSec: 169, progressSec: 47, playing: true, receivedAt: Date.now(),
+  });
+  assert.ok(!byId.audiobar.classList.contains('nocarrier'));
+  assert.ok(byId.nptrack.innerHTML.includes('Route 66'));
+  assert.ok(byId.nptrack.innerHTML.includes('Chuck Berry'));
+  assert.ok(byId.nptime.textContent.startsWith('0:47'));
+
+  win.R66.dispatch('nowplaying', { title: '', artist: '', playing: false });
+  assert.ok(byId.audiobar.classList.contains('nocarrier'));
+  assert.equal(byId.nptrack.textContent, 'NO CARRIER');
 });
 
 test('map overlay updates footer, badge, and coordinate chip', () => {

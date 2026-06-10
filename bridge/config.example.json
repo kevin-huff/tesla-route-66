@@ -39,6 +39,7 @@
     "lowBatteryPct": 15,
     "criticalBatteryPct": 10,
     "lowBatteryRearmPct": 3,
+    "scMarginWarnMi": 40,
     "speedSpikeMph": 25,
     "speedMaxPlausibleMph": 110
   },

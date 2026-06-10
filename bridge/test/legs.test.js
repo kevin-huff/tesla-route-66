@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRoute } from '../src/legs.js';
+import { buildRoadPath, loadGeometry } from '../src/road-path.js';
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(TEST_DIR, '../..');
@@ -81,6 +82,31 @@ test('next waypoint + STANDBY tag at leg 3', () => {
   });
   assert.equal(m.nextWaypoint.name, 'MARICOPA, AZ');
   assert.equal(m.nextWaypoint.tag, 'STANDBY');
+});
+
+test('nextSuperchargerAhead walks the road, not the crow-flies', () => {
+  const r = route();
+  // no geometry attached -> no opinion
+  assert.equal(r.nextSuperchargerAhead(1000), null);
+
+  r.attachRoadPath(buildRoadPath(r.route, loadGeometry(path.join(REPO, 'config/route-geometry.json'))));
+  const vanhornM = r.roadPath.distById.get('sc_vanhorn');
+  assert.ok(vanhornM > 0);
+
+  // 5 km past Van Horn -> the next SC is a different, later station with positive road miles
+  const next = r.nextSuperchargerAhead(vanhornM + 5000);
+  assert.ok(next, 'a supercharger remains ahead');
+  assert.notEqual(next.id, 'sc_vanhorn');
+  assert.ok(next.mi > 0 && next.mi < 400, `sane road distance (got ${next.mi})`);
+  assert.ok(/[A-Z]/.test(next.place), 'place is display-ready');
+
+  // sitting AT a supercharger counts it (margin row is hidden while docked anyway)
+  const here = r.nextSuperchargerAhead(vanhornM);
+  assert.equal(here.id, 'sc_vanhorn');
+  assert.equal(here.mi, 0);
+
+  // home stretch after the last SC -> nothing ahead
+  assert.equal(r.nextSuperchargerAhead(r.roadPath.totalM - 1000), null);
 });
 
 test('Maricopa standby active only between arrival and leg-4 start', () => {

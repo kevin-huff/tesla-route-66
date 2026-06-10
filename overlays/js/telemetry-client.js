@@ -44,6 +44,7 @@
       if (d.trail) dispatch('trail', d.trail); // before map: seed the breadcrumb first
       if (d.map) dispatch('map', d.map);
       if (d.logbook) dispatch('logbook', d.logbook);
+      if (d.nowPlaying) dispatch('nowplaying', d.nowPlaying);
       // always re-show the last transmission on (re)connect (OBS refresh / fire-then-open);
       // the overlay auto-hides it after transmissionDwellMs.
       if (d.lastTransmission) dispatch('transmission', d.lastTransmission);
@@ -64,6 +65,7 @@
     if (window.R66_DEMO) {
       demoStop = window.R66_DEMO.start(api, {
         warn: params.get('state') === 'warn',
+        charge: params.get('state') === 'charge',
         idle: params.has('idle'),
       });
     }

@@ -22,6 +22,8 @@ const TOPIC_MAP = {
   charger_power: (s, v) => { s.chargerPowerKw = num(v) || 0; },
   plugged_in: (s, v) => { s.pluggedIn = v === 'true' || v === true; },
   charge_energy_added: (s, v) => { s.chargeEnergyAddedKwh = num(v) || 0; }, // kWh, per session, from the car
+  time_to_full_charge: (s, v) => { s.timeToFullChargeH = num(v) || 0; }, // decimal hours to the set limit
+  charge_limit_soc: (s, v) => { s.chargeLimitSoc = num(v); }, // target %
 };
 
 const num = (v) => {
@@ -43,7 +45,8 @@ export async function startLiveSources({ cfg, route, store, hub, onTick }) {
     batteryLevel: null, usableBatteryLevel: null, speedKmh: 0, lat: null, lng: null,
     estRangeKm: 0, insideTempC: 0, outsideTempC: 0, odometerKm: null, elevationM: null,
     state: 'online', chargerPowerKw: 0, pluggedIn: false, headingDeg: null,
-    chargeEnergyAddedKwh: 0, // dtSec stays unset live — the pipeline uses wall-clock deltas
+    chargeEnergyAddedKwh: 0, timeToFullChargeH: 0, chargeLimitSoc: null,
+    // dtSec stays unset live — the pipeline uses wall-clock deltas
   };
   let dirty = false;
   let emitTimer = null;

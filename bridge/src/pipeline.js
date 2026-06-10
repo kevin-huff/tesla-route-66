@@ -132,6 +132,10 @@ export function createPipeline({ cfg, route, store, state, hub }) {
     t.battSegments = Math.round((t.batteryPct / 100) * 14);
     t.warn = t.usableBatteryPct <= cfg.thresholds.lowBatteryPct && !t.pluggedIn;
     t.statusText = t.warn ? 'CHARGE CRITICAL' : 'ALL SYSTEMS NOMINAL';
+    t.chargeLimitPct = snap.chargeLimitSoc != null ? Math.round(snap.chargeLimitSoc) : null;
+    t.timeToFullMin = snap.state === 'charging'
+      ? Math.max(0, Math.round((snap.timeToFullChargeH || 0) * 60))
+      : null;
 
     if (t.lat != null && t.lng != null) {
       const tr = s.trail || (s.trail = []); // tolerate stores written before trail existed
@@ -172,6 +176,13 @@ export function createPipeline({ cfg, route, store, state, hub }) {
     if (snap.standbyHint) map.standby.active = true;
     Object.assign(state.map, map);
     if (map.routeDistM != null) s.routeDistM = map.routeDistM; // on-route progress for ROUTE COMPLETE %
+
+    // range margin vs the next planned supercharger (holds last on-route position off-plan)
+    const sc = route.nextSuperchargerAhead(map.routeDistM ?? s.routeDistM ?? null);
+    t.nextSc = sc;
+    t.marginMi = sc ? Math.round(t.rangeMi - sc.mi) : null;
+    t.marginWarn = sc != null && !t.pluggedIn &&
+      t.marginMi < (cfg.thresholds.scMarginWarnMi ?? 40);
 
     Object.assign(state.logbook, deriveLogbook(route, store, cfg));
 
