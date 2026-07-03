@@ -66,9 +66,11 @@ export function loadConfig() {
     if (env.R66_LLM_API_KEY) cfg.transmissions.llm.apiKey = env.R66_LLM_API_KEY;
     if (env.R66_LLM_MODEL) cfg.transmissions.llm.model = env.R66_LLM_MODEL;
   }
+  if (cfg.ride && env.R66_RIDE_TOKEN) cfg.ride.authToken = env.R66_RIDE_TOKEN;
 
-  if (cfg.mode !== 'demo' && cfg.mode !== 'live') {
-    throw new Error(`config.mode must be "demo" or "live" (got "${cfg.mode}")`);
+  // night-demo: ride-tracker city simulation (Night Drive suite) instead of the Route 66 replay
+  if (cfg.mode !== 'demo' && cfg.mode !== 'live' && cfg.mode !== 'night-demo') {
+    throw new Error(`config.mode must be "demo", "live", or "night-demo" (got "${cfg.mode}")`);
   }
 
   const resolve = (p) => (path.isAbsolute(p) ? p : path.resolve(BRIDGE_ROOT, p));

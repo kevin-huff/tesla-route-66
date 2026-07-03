@@ -1,0 +1,317 @@
+/* nd-tokens.css — Night Drive design tokens + shared chrome.
+   The daily-uniform system: kinetic minimalism, one volt accent, motion over
+   decoration. Spec of record: planning/night-drive/Night_Drive_Handoff.md.
+   Canvas: 1920×1080. No scanlines, no glow-for-glow's-sake — this is NOT the
+   Route 66 amber costume; keep the two token files separate forever. */
+
+@import url('fonts.css');
+
+:root {
+  /* color */
+  --surface-base: #101215;
+  --surface-well: #14171C;
+  --surface-deep: #0E1013;
+  --scrim-72: rgba(10, 12, 15, 0.72);
+  --scrim-78: rgba(10, 12, 15, 0.78);
+  --scrim-84: rgba(10, 12, 15, 0.84);
+  --scrim-90: rgba(10, 12, 15, 0.9);
+  --scrim-94: rgba(10, 12, 15, 0.94);
+  --hairline: #2A2E33;
+  --hairline-55: rgba(42, 46, 51, 0.55);
+  --map-grid: #232830;
+  --map-avenue: #262C34;
+  --text-primary: #F2F4F6;
+  --text-secondary: #8B929A;
+  --text-dim: #B9BFC7;
+  --volt: #C8F542;
+  --volt-dim: rgba(200, 245, 66, 0.6);
+  --volt-wash: rgba(200, 245, 66, 0.1);
+  --volt-40: rgba(200, 245, 66, 0.4);
+  --amber: #FFB454; /* reconnecting / stale ONLY — never decorative */
+  --on-volt: #0E1013;
+
+  /* type */
+  --font-label: 'Barlow', 'Segoe UI', sans-serif;
+  --font-data: 'JetBrains Mono', 'Cascadia Mono', monospace;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-odo: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --ease-draw: cubic-bezier(0.3, 0.7, 0.2, 1);
+  --t-panel: 200ms;
+  --t-ticker: 350ms;
+  --t-xfade: 450ms;
+  --t-pulse: 500ms;
+  --t-odo: 700ms;
+  --t-draw: 800ms;
+  --t-split: 1000ms;
+  --t-drift: 1600ms;
+
+  /* radii */
+  --r-chip: 3px;
+  --r-key: 5px;
+  --r-btn: 6px;
+  --r-card: 10px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 1920px;
+  height: 1080px;
+  background: transparent;
+  overflow: hidden;
+  font-family: var(--font-label);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* data numerals never jitter */
+.mono, .num {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- shared atoms ---- */
+
+.nd-label {
+  font: 600 14px var(--font-label);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.nd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--scrim-78);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-chip);
+  padding: 7px 13px;
+  font: 600 13px var(--font-data);
+  letter-spacing: 0.2em;
+  color: var(--volt);
+}
+
+.nd-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--volt);
+  flex: none;
+}
+.nd-dot.blink { animation: nd-blink 2.2s ease infinite; }
+.nd-dot.gray { background: var(--text-secondary); animation: none; }
+.nd-dot.amber { background: var(--amber); animation: nd-blink 1.4s ease infinite; }
+@keyframes nd-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* wordmark block (corner, persistent) */
+.nd-wordmark .wm-title {
+  font: 700 27px var(--font-label);
+  letter-spacing: 0.24em;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.nd-wordmark .wm-sub {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 8px;
+  font: 500 14px var(--font-data);
+  letter-spacing: 0.2em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.nd-wordmark.stale .wm-sub { color: var(--amber); }
+
+/* volt pulse underline (state cell / panels). .fire re-triggers the pulse. */
+.nd-pulse {
+  height: 4px;
+  background: var(--volt);
+  opacity: 0;
+  border-radius: 2px;
+}
+.nd-pulse.fire { animation: nd-pulse 750ms ease; }
+@keyframes nd-pulse {
+  0% { opacity: 0; }
+  35% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* odometer — vertical digit strips; roll via translateY */
+.nd-odo {
+  display: inline-flex;
+  align-items: flex-start;
+  color: var(--volt);
+  font: 600 46px var(--font-data);
+  font-variant-numeric: tabular-nums;
+  line-height: 52px;
+  height: 52px;
+  overflow: hidden;
+}
+.nd-odo .odo-static { flex: none; }
+.nd-odo .odo-digit {
+  flex: none;
+  width: 29px;
+  height: 52px;
+  overflow: hidden;
+  text-align: center;
+}
+.nd-odo .odo-strip {
+  display: block;
+  transition: transform var(--t-odo) var(--ease-odo);
+}
+.nd-odo .odo-strip span { display: block; height: 52px; }
+/* smaller variants set via a scale factor */
+.nd-odo.s34 { font-size: 34px; line-height: 40px; height: 40px; }
+.nd-odo.s34 .odo-digit { width: 22px; height: 40px; }
+.nd-odo.s34 .odo-strip span { height: 40px; }
+
+/* ride ticker chip */
+.nd-ticker-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 14px;
+  background: var(--scrim-72);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-chip);
+  padding: 11px 18px;
+  white-space: nowrap;
+}
+.nd-ticker-chip .tk-n { font: 500 16px var(--font-data); color: var(--text-secondary); }
+.nd-ticker-chip .tk-dur { font: 500 17px var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.nd-ticker-chip .tk-fare { font: 700 17px var(--font-data); color: var(--volt); }
+.nd-ticker-chip .tk-tip { font: 500 16px var(--font-data); color: var(--volt-dim); }
+.nd-enter { animation: nd-enter var(--t-ticker) ease; }
+@keyframes nd-enter {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* event card (panel-level moment, never full-screen) */
+.nd-event {
+  width: 410px;
+  background: var(--scrim-90);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-chip);
+  padding: 18px 22px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--t-panel) ease-out, transform var(--t-panel) ease-out;
+  pointer-events: none;
+}
+.nd-event.show { opacity: 1; transform: translateY(0); }
+.nd-event .ev-label {
+  font: 600 13px var(--font-label);
+  letter-spacing: 0.22em;
+  color: var(--volt);
+}
+.nd-event .ev-label.gray { color: var(--text-secondary); } /* Twitch events: volt is for money/telemetry */
+.nd-event .ev-main {
+  margin-top: 8px;
+  display: flex; align-items: baseline; gap: 14px;
+}
+.nd-event .ev-value { font: 600 26px var(--font-data); font-variant-numeric: tabular-nums; color: var(--volt); }
+.nd-event .ev-value.white { color: var(--text-primary); }
+.nd-event .ev-sub { font: 500 15px var(--font-data); color: var(--text-secondary); }
+.nd-event .ev-underline {
+  height: 3px; background: var(--volt);
+  margin-top: 14px; opacity: 0; border-radius: 2px;
+}
+.nd-event.show .ev-underline { animation: nd-pulse 750ms ease 60ms; }
+
+/* split bar (ride vs idle) */
+.nd-split { height: 5px; background: var(--hairline); border-radius: 3px; overflow: hidden; }
+.nd-split .fill {
+  height: 100%; background: var(--volt); border-radius: 3px;
+  transition: width var(--t-split) ease;
+}
+
+/* ---- map module (js/nd-map.js) ---- */
+.nd-map {
+  position: relative;
+  background: var(--surface-well);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-chip);
+  overflow: hidden;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.5);
+}
+.nd-map .ndm-well { position: absolute; inset: 0; }
+.nd-map .ndm-well .maplibregl-canvas { position: absolute; inset: 0; }
+.nd-map .ndm-canvas { position: absolute; inset: 0; }
+.nd-map .ndm-fade {
+  position: absolute; inset: 0;
+  background: var(--surface-well);
+  opacity: 1;
+  transition: opacity 225ms ease;
+  pointer-events: none;
+  z-index: 5;
+}
+.nd-map .ndm-tag { position: absolute; top: 14px; left: 14px; z-index: 6; }
+.nd-map .ndm-dots {
+  position: absolute; top: 20px; right: 16px; z-index: 6;
+  display: flex; gap: 8px;
+}
+.nd-map .ndm-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--volt); opacity: 0.25;
+  transition: opacity 300ms ease;
+}
+.nd-map .ndm-dot.on { opacity: 1; }
+.nd-map .ndm-speed {
+  position: absolute; left: 14px; bottom: 14px; z-index: 6;
+  color: var(--text-primary);
+}
+.nd-map .ndm-caption { position: absolute; left: 14px; bottom: 14px; z-index: 6; color: var(--text-secondary); }
+.nd-map .ndm-nav {
+  position: absolute; top: 0; left: 0; z-index: 4;
+  width: 0; height: 0;
+  transition: transform var(--t-drift) linear;
+  display: none;
+}
+.nd-map .ndm-nav .dot {
+  position: absolute; top: -8px; left: -8px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--volt);
+  box-shadow: 0 0 22px rgba(200, 245, 66, 0.6);
+}
+.nd-map .ndm-nav .ping {
+  position: absolute; top: -24px; left: -24px;
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 2.5px solid var(--volt);
+  animation: ndm-ping 2.4s ease-out infinite;
+}
+@keyframes ndm-ping {
+  0% { transform: scale(0.3); opacity: 0.9; }
+  80%, 100% { transform: scale(1.15); opacity: 0; }
+}
+.nd-map .ndm-privacy {
+  position: absolute; top: 0; left: 0; z-index: 3;
+  width: 0; height: 0; display: none;
+  pointer-events: none;
+}
+.nd-map .ndm-privacy::before {
+  content: '';
+  position: absolute; top: -85px; left: -85px;
+  width: 170px; height: 170px; border-radius: 50%;
+  background: radial-gradient(circle, var(--surface-well) 0%, rgba(20, 23, 28, 0.85) 45%, transparent 72%);
+}
+.nd-map .ndm-privacy span {
+  position: absolute; top: -6px; left: -32px;
+  font: 500 11px var(--font-data);
+  letter-spacing: 0.22em;
+  color: rgba(139, 146, 154, 0.75);
+}
+
+/* reconnecting: freeze + dim (quiet, not an error) */
+.nd-freeze { opacity: 0.45; transition: opacity 300ms ease; }
+
+/* dev controls (hidden in OBS with ?embed) */
+.dev {
+  position: fixed; top: 10px; left: 10px; z-index: 99;
+  display: flex; gap: 6px; opacity: 0.85;
+}
+.dev button {
+  background: #1A1D21; color: #8B929A; border: 1px solid #2A2E33;
+  font: 500 11px var(--font-data); padding: 5px 9px; border-radius: 3px; cursor: pointer;
+}
+.dev button:hover { color: #F2F4F6; }
+body.embed .dev { display: none; }

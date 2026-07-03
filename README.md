@@ -4,6 +4,8 @@ OBS stream overlays that render **live Tesla telemetry** from a local [TeslaMate
 
 > **Real data, retro housing.** The camera feed stays clean and legible; all the styling lives in the panels, gauges, and nixie readouts around it.
 
+This repo now hosts **two** overlay systems on the same bridge: the Route 66 trip suite (below) and **[Night Drive](#night-drive--ride-shift-tracker-nightly-stream)** — the nightly rideshare stream's ride-shift tracker, overlay suite, and phone PWA, in its own design system.
+
 The trip is a loop with a one-week pause in the middle:
 
 ```
@@ -29,7 +31,7 @@ An OBS browser source is a Chromium page — it can't subscribe to raw MQTT. So 
 │ odometer │────────▶│ HTTP: WS + REST + static     │ /api/  │  via js/telemetry-client   │
 └──────────┘         └─────────────────────────────┘        └────────────────────────────┘
                               ▲           │
-                       POST /api/alert    └─ event:lowBattery / legComplete / landmarkEntered
+                       POST /api/alert    └─ event:lowBattery / legComplete / landmarkEntered / transmission
                        (Streamerbot/Twitch)     (Streamerbot listens on the same socket)
 ```
 
@@ -96,15 +98,20 @@ Watch the boot logs — `[r66] mqtt connected …` confirms the broker, and `GET
 
 ## Transmissions (LLM)
 
-By default the Transmission Card is driven by an LLM instead of the preset landmark list. On a timer the bridge takes the car's current GPS and asks a local **OpenAI-compatible** endpoint (e.g. [clewdr](https://github.com/Xerxes-2/clewdr)) to write a transmission log about wherever the car is, in the show's voice — coordinates go straight to the model, so a capable backend that knows geography does the place-finding. Configure it under `transmissions` in `config.json`:
+By default the Transmission Card is driven by an LLM instead of the preset landmark list. On a timer the bridge takes the car's current GPS and asks a local **OpenAI-compatible** endpoint (e.g. [clewdr](https://github.com/Xerxes-2/clewdr)) to write a transmission log about wherever the car is, in the show's voice — coordinates go straight to the model, so a capable backend that knows geography does the place-finding.
+
+Variety comes from two mechanisms: each call draws an **angle** (history / local lore / Route 66 era / landscape / music & film / town portrait / roadside food / mission-control report) from a shuffle bag so every lens appears before any repeats, and the prompt carries the last few places covered (`recentPlaces`) so the model doesn't circle the same subject. The prompt also includes local time, leg, battery, and the next planned Supercharger, so the mission-control angle can reference real trip state. A car docked at a charger still transmits — the arrival fires one card about the stop, then the move gate holds until the wheels roll again.
+
+Configure it under `transmissions` in `config.json`:
 
 ```json
 "transmissions": {
   "source": "llm",                 // "llm" | "geofence" | "both"
-  "intervalSec": 300,              // generate every ~5 min
+  "intervalSec": 180,              // generate every ~3 min
   "kickoffSec": 20,                // first one shortly after boot
-  "drivingOnly": true,             // skip while parked/charging
+  "drivingOnly": true,             // only on the road (driving or charging) — skip parked/asleep
   "minMoveMi": 3,                  // skip if the car hasn't moved this far since the last one
+  "recentPlaces": 6,               // how many recent subjects the model is told to avoid
   "llm": {
     "baseUrl": "http://localhost:8484/v1",
     "apiKey": "",                  // set if your endpoint needs one (or R66_LLM_API_KEY)
@@ -119,8 +126,9 @@ By default the Transmission Card is driven by an LLM instead of the preset landm
 - `source`: `llm` replaces the preset transmissions (geofences still drive legs / logbook / Streamerbot events silently); `geofence` uses the hand-written `landmarks.json` lore; `both` does both.
 - Endpoint failures are logged and skipped — the card just holds its last frame; `GET /healthz` reports the `llm` status.
 - Overrides: `R66_LLM_BASE_URL`, `R66_LLM_API_KEY`, `R66_LLM_MODEL`.
+- Every transmission (LLM **and** geofence) is also broadcast as `event:transmission` with ready-to-post `chatText` — see [Streamerbot integration](#streamerbot-integration) for piping it to Twitch chat.
 
-**Display + triggers.** The card always re-shows the last transmission when an overlay (re)connects — e.g. an OBS source refresh — and auto-hides after `transmissionDwellMs` (default 90s, in `overlays/config/overlay-config.js`). Two HTTP triggers (GET **or** POST, so they're easy to wire to a chatbot's URL-fetch or an OBS hotkey):
+**Display + triggers.** The card always re-shows the last transmission when an overlay (re)connects — e.g. an OBS source refresh — and auto-hides after `transmissionDwellMs` (default 150s, in `overlays/config/overlay-config.js`). Two HTTP triggers (GET **or** POST, so they're easy to wire to a chatbot's URL-fetch or an OBS hotkey):
 
 - `GET|POST /api/transmission/show` — re-show the last transmission (pop the card back up).
 - `GET|POST /api/transmission/generate` — force a fresh one now (ignores the timer + driving/move gates). `/api/transmission/test` is an alias.
@@ -135,7 +143,7 @@ To drive it from Twitch chat, use a **local** bot (Streamerbot can reach `localh
 - `server.port` — default `8787`
 - `vehicle.carId` — TeslaMate car id (usually `1`)
 - `mqtt.url` / `mqtt.topicBase` — e.g. `mqtt://teslamate.lan:1883`, `teslamate/cars/1`
-- `postgres.*` — connection for the optional cumulative cross-check poller
+- `postgres.*` — connection for the optional accuracy poller (live mode: counts DC fast-charge stops for the SUPERCHARGERS counter and derives STATES from TeslaMate's geocoded drive addresses, so off-plan chargers and landmark-free state crossings still count)
 - `thresholds.lowBatteryPct` — when the telemetry console flips to the klaxon state
 - `thresholds.scMarginWarnMi` — when the NEXT SC margin readout goes amber (default 40)
 - `transmissions.*` — LLM-driven Transmission Card (see [Transmissions (LLM)](#transmissions-llm))
@@ -151,6 +159,34 @@ The bridge is the event hub. Streamerbot connects a **WebSocket Client** to `ws:
 - `event:lowBattery` — `{ batteryPct, usableBatteryPct, rangeMi, severity, threshold, nearestSupercharger }`
 - `event:legComplete` — `{ leg, title, nextLeg, isStandby, legsDone, totalLegs }`
 - `event:landmarkEntered` — `{ id, name, type_, leg, header }`
+- `event:transmission` — `{ id, place, body, leg, type_, chatText }` — every Transmission Card (LLM and geofence), with `chatText` pre-formatted for Twitch chat (under the 500-char IRC limit)
+
+**Transmissions → Twitch chat.** Add a *WebSocket Client* in Streamer.bot pointed at `ws://<bridge-host>:8787`, create an action on its **Message** trigger, and give it one *Execute C# Code* sub-action (the trigger delivers the raw WS payload in `%message%`):
+
+```csharp
+using System;
+
+public class CPHInline
+{
+    public bool Execute()
+    {
+        if (!CPH.TryGetArg("message", out string raw)) return false;
+        var msg = Newtonsoft.Json.Linq.JObject.Parse(raw);
+        if ((string)msg["type"] != "event:transmission") return true; // ignore telemetry/map/etc.
+        var id = (string)msg["data"]?["id"];
+        if (!string.IsNullOrEmpty(id) && id == CPH.GetGlobalVar<string>("r66LastTxId", false))
+            return true; // already posted — guards duplicate triggers / extra WS clients
+        CPH.SetGlobalVar("r66LastTxId", id, false);
+        var chatText = (string)msg["data"]?["chatText"];
+        if (!string.IsNullOrEmpty(chatText)) CPH.SendMessage(chatText, true);
+        return true;
+    }
+}
+```
+
+The envelope is `{type, ts, seq, data}`, so the filter on `type` is what keeps the firehose (telemetry every tick) out of chat. Use the same pattern with `event:lowBattery` / `event:legComplete` for chat callouts on those.
+
+If chat gets every transmission **twice**, two things are firing: each transmission goes out as both `transmission` (overlay card) and `event:transmission` (this chat hook), so an older action triggering on `transmission` — or a second WebSocket Client feeding the same action — posts a duplicate. Keep exactly one action filtered to `event:transmission`; the `r66LastTxId` guard above makes a stray duplicate harmless either way.
 
 For Twitch alerts, point a Streamerbot action at the ingress:
 
@@ -221,6 +257,11 @@ bridge/            Node event hub
       replay-source.js   DEMO engine (drives the real road geometry)
       mqtt-source.js     LIVE TeslaMate MQTT
       pg-source.js       LIVE Postgres cross-check (optional)
+    ride/              Night Drive ride-shift tracker module
+      tracker.js         shift/ride/tip state machine (timestamp-derived timers)
+      json-store.js      file store (demo/fallback) · pg-store.js  Postgres (ride_tracker schema)
+      routes.js          /api/ride/* REST · privacy.js  home-zone filter · heat.js  pickup binning
+      night-demo.js      city simulation (npm run demo:night)
   scripts/
     fetch-route-geometry.mjs   one-time OSRM geometry build (committed output)
   test/            node:test suite (units, geo, geofence, legs, road-path, persistence, replay, overlays)
@@ -230,6 +271,12 @@ overlays/          OBS browser sources (vanilla HTML/CSS/JS)
   js/telemetry-client.js   shared WS client + demo fallback
   config/              overlay-config.js · map-style-amber.js · route-geometry.js (generated)
   vendor/              maplibre-gl (pinned 5.6.0)
+  night-drive/         Night Drive suite (separate design system — volt/charcoal)
+    nd-tokens.css        token sheet + shared chrome · fonts/ self-hosted Barlow + JetBrains Mono
+    rail.html data.html recap.html   the three OBS scenes
+    js/                  nd-client.js (WS) · nd-ui.js (odometer/timers/events) · nd-map.js (NAV/ROUTE/HEAT) · nd-demo.js
+    config/              nd-config.js · map-style-night.js
+    dash/                installable PWA (fare keypad, tips, retry queue)
 config/            legs.json (six legs, nodes) · route-geometry.json (generated road polylines)
 planning/          design brief, project plan, landmarks.json (geofence lore)
 ```
@@ -241,6 +288,93 @@ cd bridge && npm test
 ```
 
 Covers unit conversions, haversine/projection, geofence debounce (incl. the shared START/HOME coordinates), leg computation, road-path invariants (every landmark snaps on-road inside its geofence radius, in trip order), persistence round-trips, a full demo-loop integration test (every WS message type, all six legs, the scripted low-battery edge), and a fake-DOM harness that executes each overlay's wiring against live-contract frames to catch field drift.
+
+## Night Drive — ride-shift tracker (nightly stream)
+
+The second overlay system in this repo: a server-side **ride tracker module** in the same bridge, plus a **Night Drive** overlay suite and a **phone PWA**, for the nightly rideshare stream. Design system is deliberately separate from the Route 66 amber costume — kinetic minimalism, one volt accent (`overlays/night-drive/nd-tokens.css`); spec of record in `planning/night-drive/`. Streamerbot is demoted to thin I/O: chat commands call bridge REST, one WebSocket subscription posts chat lines from bridge events.
+
+```bash
+cd bridge
+npm run demo:night     # city ride/idle simulation — full suite animates, no car, no Postgres
+```
+
+### OBS sources (1920×1080, all full-canvas, transparent)
+
+| Scene | URL | Notes |
+|---|---|---|
+| LIVE | `/night-drive/rail.html?embed` | lower-third rail + ticker chips + map dock + event cards |
+| DATA | `/night-drive/data.html?embed` | full-screen stats; put the camera source UNDER it (the 1060×596 panel is a transparent hole) |
+| RECAP | `/night-drive/recap.html?embed` | hidden until `shift_ended`; safe to keep loaded |
+
+Rail params: `?collapse` hides the totals tier. Every page falls back to a canned client-side sim when no bridge is reachable, so files render standalone.
+
+### Ride tracker module (`bridge/src/ride/`)
+
+- **Owns all state**: shifts, rides (GPS pickup/dropoff snapshots from the shared telemetry feed), tips (attributable to any ride), idle intervals. All timers derive from stored timestamps — a bridge restart mid-ride loses nothing.
+- **Storage**: Postgres in live mode (`ride.storage: "auto" | "pg"`), in a dedicated `ride_tracker` schema (never touches TeslaMate's tables; DDL bootstraps itself). JSON file fallback/demo (`bridge/data/ride-tracker.json`).
+- **Money is integer cents** everywhere. Chat-style dollar strings (`!end_ride 14.75`) are converted at the API edge.
+- **Idempotency**: every POST accepts an `idempotencyKey`; retries and double-taps replay the original result instead of double-logging. State-machine guards (409s) back that up.
+- **Day boundary is 4 AM local** (`ride.dayRolloverHour`) so a 9 PM–3 AM shift is one "day".
+- **stats_tick** broadcasts every `ride.statsTickSec` (5s) while a shift is live; payloads carry `serverNow` so overlay timers never drift.
+
+### REST (auth: `Authorization: Bearer <ride.authToken>` or `?token=`; required for POSTs and `?private=1`)
+
+```
+POST /api/ride/shift/start | /api/ride/shift/end
+POST /api/ride/start | /api/ride/end {fareCents | earnings}
+POST /api/ride/tip {amountCents | amount, rideId?}      # no rideId -> most recent ride
+POST /api/ride/map/mode {mode: nav|route|heat}          # force the overlay map view
+POST /api/ride/summary/resend                           # re-post last ride/shift summary to chat
+POST /api/ride/seed {month, earnings, rides, shiftSeconds}   # one-time migration (below)
+GET  /api/ride/stats/today | /stats/month | /stats/chat | /rides/today
+GET  /api/ride/map/route/today | /api/ride/map/heat?binM&from&to&dow&hour
+```
+
+WS events on the shared hub: `shift_started`, `ride_started`, `ride_ended {stats, chatText}`, `tip_added`, `shift_ended {summary, chatText}`, `stats_tick`, `map_mode`, `personal_best`.
+
+### Privacy geofence
+
+Configure `ride.privacy {lat, lng, radiusM}`. Enforced **server-side at every payload boundary**: path points inside the zone are dropped (segments split; the overlay renders a radial fade + `PRIVACY` label at the cut), single points (NAV position, heat pickups on the stream endpoint) are clamped/dropped, and the shared `telemetry`/`map` channels are clamped in the pipeline too. `bridge/test/ride-privacy.test.js` asserts no in-zone coordinate ever appears in any overlay-facing payload. The PWA (private, authed) sees unfiltered data. No reverse-geocoded addresses render anywhere on stream — coordinates are map geometry only.
+
+### Streamerbot rewire
+
+Keep six command actions, each one **HTTP Request** sub-action (POST, header `Authorization: Bearer <token>`):
+
+| Command | Request |
+|---|---|
+| `!start_shift` / `!end_shift` | `POST /api/ride/shift/start` · `/api/ride/shift/end` — body `{"source":"chat"}` |
+| `!start_ride` | `POST /api/ride/start` — `{"source":"chat"}` |
+| `!end_ride 14.75` | `POST /api/ride/end` — `{"source":"chat","earnings":"%rawInput%"}` |
+| `!add_tip 5` | `POST /api/ride/tip` — `{"source":"chat","amount":"%rawInput%"}` |
+| `!ride_stats` | `GET /api/ride/stats/chat` → post `chatText` |
+
+Chat lines come from ONE WebSocket Client action (same pattern as the [transmission hook](#streamerbot-integration)) filtered to `ride_ended` / `shift_ended` — each payload carries a ready `chatText` under the IRC limit. **Delete** the legacy timer/stat actions and globals (Update Idle/Ride/Shift Time, Reset Ride Data): timers render in the overlay from bridge state now. A full shift works with Streamerbot offline; chat simply resumes on reconnect.
+
+**Migration** — before cutover, copy the current month totals out of the old Streamerbot globals once:
+
+```bash
+curl -X POST http://<bridge>:8787/api/ride/seed -H "Authorization: Bearer $TOKEN" \
+  -d '{"month":"2026-07","earnings":"1842.75","rides":131,"shiftSeconds":324000}'
+```
+
+Month stats = seed + tracked rides from then on, to the cent; seed is zero for later months.
+
+### PWA dashboard (`/night-drive/dash/`)
+
+Installable, dark, one-handed: start/end shift, start/end ride with a cents-exact fare keypad (`1 2 4 7` → `$12.47`), tip attribution to any of today's rides, live stats, map-mode override, resend-chat. Mutations go through a **persistent retry queue** with idempotency keys — flaky cellular or an app kill can't lose or double-log a ride. The ride list shows pickup→dropoff coordinates (private surface only). Set the token once via the TOKEN button (stored on-device).
+
+**Remote access (the phone in the car is not on the LAN): use Tailscale.** Install tailscaled on Unraid and Tailscale on the phone, then install the PWA from `http://<tailscale-ip>:8787/night-drive/dash/`. No ports exposed, WireGuard-encrypted, and the bearer token stays as a second factor. (A Cloudflare Tunnel + Access works too if you ever need viewer-facing pages remote, but don't put the PWA on the public internet.)
+
+### Heat map
+
+`GET /api/ride/map/heat` returns grid-binned pickup densities (`ride.heat.binM`, default 250 m) — never raw points. The overlay's HEAT view renders it as a soft volt density layer ("where Kevin hunts"). The same endpoint with `?from&to&dow&hour` filters powers personal analytics from the PWA (e.g. `?dow=5,6&hour=21,22,23` = weekend late-night pickups). History accumulates from cutover — no backfill (TeslaMate drives have no ride/no-ride labels; the schema's `source` column leaves room for a manual import if you ever change your mind).
+
+### Night Drive config (`bridge/config.example.json` → `ride`)
+
+- `authToken` — shared bearer for PWA/Streamerbot POSTs (`R66_RIDE_TOKEN` env override). Auth is disabled while it's `CHANGE_ME` (dev/demo).
+- `storage` — `auto` (pg in live mode, JSON otherwise) | `pg` | `json`; `pgSchema` (default `ride_tracker`)
+- `privacy.lat/lng/radiusM` — home zone; **set this before going live**
+- `heat.binM`, `path.minMoveM/maxPoints`, `statsTickSec`, `timezone`, `shiftStartsAt` (pre-shift rail text), `demo.*` (night-demo tuning)
 
 ## Notes
 

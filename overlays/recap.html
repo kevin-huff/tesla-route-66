@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trip Recap — The Kevin Show</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Kaushan+Script&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="overlay-system.css">
+<style>
+  /* =====================================================================
+     TRIP RECAP — end-of-trip shareable card. 1080 x 1920 vertical poster.
+     Reuses the amber-CRT console design system. Pulls the live logbook off
+     the bridge; renders a completed-loop dataset when opened standalone so
+     a screenshot always reads "done". ?still jumps to the final frame.
+     ===================================================================== */
+  html, body { height:100%; }
+  body.ovl {
+    background:
+      radial-gradient(120% 80% at 50% 0%, #120d06 0%, #080604 55%, #050403 100%);
+    display:flex; align-items:center; justify-content:center; min-height:100vh;
+  }
+
+  /* The card is a fixed 1080x1920 stage. We scale it to fit the viewport so it
+     previews at any window size; for a pixel-exact export, size the browser /
+     screenshot region to 1080x1920 (or append ?still and grab the card node). */
+  .stage { width:1080px; height:1920px; transform-origin:center center; }
+
+  .card {
+    width:1080px; height:1920px;
+    padding:64px 60px 56px;
+    display:flex; flex-direction:column;
+    /* punch-card clipped top-left corner, echoing the logbook strip */
+    clip-path: polygon(54px 0, 100% 0, 100% 100%, 0 100%, 0 54px);
+  }
+  .card-inner { display:flex; flex-direction:column; height:100%; gap:0; }
+
+  /* reveal scaffolding — each .rv fades/rises in; .lit class triggers it.
+     ?still and reduced-motion render everything already lit. */
+  .rv { opacity:0; transform:translateY(16px); }
+  .rv.lit { opacity:1; transform:none; transition:opacity .5s ease, transform .5s cubic-bezier(.2,.7,.2,1); }
+  body.still .rv, body.still .rv { opacity:1; transform:none; }
+
+  /* ---- masthead ---- */
+  .mast { text-align:center; }
+  .kicker {
+    font-family:var(--font-display); font-size:20px; letter-spacing:.34em; color:var(--amber);
+    text-shadow:var(--glow-amber-soft); margin-bottom:18px;
+  }
+  .wordmark {
+    font-family:var(--font-script); font-size:104px; line-height:.86; color:#fff3d8; margin:0;
+    text-shadow:0 0 8px #fff, 0 0 22px var(--amber-bright), 0 0 48px rgba(255,140,0,.6);
+  }
+  .subtitle {
+    font-family:var(--font-label); font-size:21px; letter-spacing:.22em; color:var(--amber-dim);
+    margin-top:16px;
+  }
+  .subtitle b { color:var(--amber); font-weight:400; }
+
+  /* status stamp under the masthead — the "we did it" line */
+  .stamp {
+    margin:22px auto 0; display:inline-flex; align-items:center; gap:16px;
+    font-family:var(--font-display); font-size:26px; letter-spacing:.18em; color:var(--amber-bright);
+    text-shadow:var(--glow-amber); padding:10px 26px;
+    border:2px solid var(--amber-deep); border-radius:8px;
+    box-shadow:var(--glow-amber-soft), inset 0 0 24px rgba(255,176,0,.06);
+  }
+  .stamp .led { width:14px; height:14px; }
+  body.still .stamp, .stamp.lit { animation: stamp-in .5s cubic-bezier(.2,1.3,.4,1) both; }
+  @keyframes stamp-in { 0% { transform:scale(1.4); opacity:0; } 60% { opacity:1; } 100% { transform:scale(1); opacity:1; } }
+
+  /* ---- hero — miles logged ---- */
+  .hero { text-align:center; margin-top:38px; }
+  .hero .hlabel {
+    font-family:var(--font-label); font-size:22px; letter-spacing:.3em; color:var(--amber);
+    text-transform:uppercase;
+  }
+  .hero .hnum {
+    font-family:var(--font-num7); font-size:236px; line-height:.92; color:#FFD86A;
+    text-shadow:0 0 4px rgba(255,176,0,.7), 0 0 22px rgba(255,140,0,.45), 0 0 60px rgba(255,120,0,.25);
+    letter-spacing:.02em; display:flex; align-items:flex-end; justify-content:center; gap:18px;
+  }
+  .hero .hnum .hunit {
+    font-family:var(--font-display); font-size:56px; color:var(--amber); letter-spacing:.04em;
+    text-shadow:var(--glow-amber-soft); margin-bottom:34px;
+  }
+  .hero .hsub { font-family:var(--font-label); font-size:18px; letter-spacing:.2em; color:var(--amber-dim); margin-top:4px; }
+
+  /* ---- route trace ---- */
+  .route { margin:30px 0 8px; position:relative; }
+  .route svg { display:block; width:100%; height:auto; overflow:visible; }
+  .route .base { fill:none; stroke:var(--amber-deep); stroke-width:3; opacity:.6; }
+  .route .live {
+    fill:none; stroke:var(--amber-bright); stroke-width:4.5; stroke-linecap:round; stroke-linejoin:round;
+    filter:drop-shadow(0 0 5px rgba(255,176,0,.7)) drop-shadow(0 0 14px rgba(255,140,0,.4));
+  }
+  .route .node { fill:#FFD86A; filter:drop-shadow(0 0 7px var(--amber-bright)); }
+  .route .node.standby { fill:#0a0806; stroke:var(--amber-bright); stroke-width:3; }
+  /* SVG <text> ignores text-shadow — fake the glow legibility with a dark halo
+     (paint-order:stroke draws the stroke behind the fill) so codes read over the line. */
+  .route .ncode {
+    font-family:var(--font-label); font-size:21px; letter-spacing:.1em; font-weight:700;
+    fill:var(--amber-bright);
+    paint-order:stroke; stroke:#0a0806; stroke-width:5px; stroke-linejoin:round;
+  }
+
+  /* ---- stat grids ---- */
+  .grid-label {
+    font-family:var(--font-display); font-size:19px; letter-spacing:.16em; color:var(--amber);
+    text-shadow:var(--glow-amber-soft); display:flex; align-items:center; gap:14px; margin:22px 0 14px;
+  }
+  .grid-label::before, .grid-label::after { content:""; height:2px; background:linear-gradient(90deg,transparent,var(--amber-deep)); flex:0 0 30px; }
+  .grid-label::after { flex:1; background:linear-gradient(90deg,var(--amber-deep),transparent); }
+
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0; }
+  .cell { position:relative; padding:6px 18px 8px; display:flex; flex-direction:column; gap:8px; }
+  .cell + .cell::before {
+    content:""; position:absolute; left:0; top:10px; bottom:10px; width:1px;
+    background:linear-gradient(180deg,transparent,var(--amber-deep),transparent);
+  }
+  .cell .clabel {
+    font-family:var(--font-label); font-size:15px; letter-spacing:.14em; color:var(--amber);
+    text-transform:uppercase; display:flex; align-items:center; gap:9px; min-height:38px;
+  }
+  .cell .glyph {
+    width:16px; height:16px; border-radius:50%; flex:0 0 auto;
+    background:radial-gradient(circle at 38% 35%, var(--amber-bright), var(--amber) 50%, #6a3d00);
+    box-shadow:var(--glow-amber-soft);
+  }
+  .cell .num {
+    font-family:var(--font-num7); font-size:84px; line-height:1; color:#FFD86A;
+    text-shadow:0 0 2px rgba(255,176,0,.6), 0 0 8px rgba(255,140,0,.32);
+    letter-spacing:.04em; display:flex; align-items:baseline; gap:6px;
+  }
+  .cell .num .unit { font-family:var(--font-display); font-size:26px; color:var(--amber); letter-spacing:.02em; }
+  .cell .num .frac { font-family:var(--font-num7); font-size:40px; color:var(--amber-dim); }
+  .cell .num .cur  { font-family:var(--font-display); font-size:40px; color:var(--amber); margin-right:2px; }
+  .cell .flex-tag {
+    font-family:var(--font-label); font-size:12px; letter-spacing:.12em; color:var(--klaxon);
+    border:1px solid var(--klaxon-dim); border-radius:3px; padding:1px 6px; text-decoration:line-through; opacity:.85;
+  }
+
+  .midrule { height:2px; margin:28px 0 4px; background:linear-gradient(90deg,transparent,var(--amber-deep) 10%,var(--amber-deep) 90%,transparent); opacity:.7; }
+
+  /* ---- footer — leg punch row + route caption ---- */
+  .foot { margin-top:auto; padding-top:30px; }
+  .punchrow { display:flex; gap:12px; justify-content:center; margin-bottom:18px; }
+  .punchrow i {
+    width:130px; height:16px; border-radius:2px; background:#070502;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.9), 0 0 0 1px rgba(255,176,0,.1);
+    transition: background .3s ease, box-shadow .3s ease;
+  }
+  .punchrow i.filled { background:var(--amber-deep); box-shadow:0 0 10px rgba(255,176,0,.4), inset 0 0 6px rgba(255,200,90,.3); }
+  .foot .legcap {
+    font-family:var(--font-label); font-size:16px; letter-spacing:.2em; color:var(--amber-dim); text-align:center;
+  }
+  .foot .legcap b { color:var(--amber); font-weight:400; }
+  .foot .route-cap {
+    font-family:var(--font-display); font-size:18px; letter-spacing:.1em; color:var(--amber);
+    text-shadow:var(--glow-amber-soft); text-align:center; margin-top:16px;
+  }
+  .foot .handle {
+    font-family:var(--font-script); font-size:34px; color:#fff3d8; text-align:center; margin-top:14px;
+    text-shadow:0 0 8px var(--amber-bright), 0 0 26px rgba(255,140,0,.5);
+  }
+
+  /* a quiet replay button (hidden with ?embed) */
+  .replay {
+    position:fixed; bottom:18px; right:18px; z-index:50;
+    font-family:var(--font-label); font-size:12px; letter-spacing:.16em; color:var(--amber-bright);
+    background:rgba(20,16,8,.85); border:1px solid var(--amber-deep); border-radius:6px;
+    padding:8px 14px; cursor:pointer; text-transform:uppercase;
+  }
+  .replay:hover { background:rgba(255,176,0,.1); box-shadow:var(--glow-amber-soft); }
+  body.embed .replay { display:none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rv { opacity:1; transform:none; transition:none; }
+  }
+</style>
+</head>
+<body class="ovl crt-flicker" data-screen-label="Trip Recap">
+  <div class="stage">
+  <div class="card panel">
+    <span class="panel-glass"></span>
+    <span class="rivets"><i></i><i></i><i></i><i></i></span>
+    <div class="card-inner panel-inner">
+
+      <!-- masthead -->
+      <div class="mast">
+        <div class="kicker rv">ROUTE 66 SERIES · MISSION DEBRIEF</div>
+        <h1 class="wordmark rv">The Kevin Show</h1>
+        <div class="subtitle rv">TESLA MEETS THE MOTHER ROAD · <b>SIX-LEG LOOP</b></div>
+        <div class="stamp" id="stamp"><span class="led"></span>TRIP COMPLETE · LOOP CLOSED</div>
+      </div>
+
+      <!-- hero: miles logged -->
+      <div class="hero">
+        <div class="hlabel rv">TOTAL DISTANCE LOGGED</div>
+        <div class="hnum"><span class="seg" data-key="miles" data-comma="1">0</span><span class="hunit">MI</span></div>
+        <div class="hsub rv">ON THE ODOMETER · SPRINGFIELD TO SPRINGFIELD</div>
+      </div>
+
+      <!-- route trace -->
+      <div class="route rv" id="routeWrap">
+        <svg id="routeSvg" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet" aria-label="Route 66 loop">
+          <path class="base" id="routeBase" d=""></path>
+          <path class="live" id="routeLive" d=""></path>
+          <g id="routeNodes"></g>
+        </svg>
+      </div>
+
+      <!-- THE TRIP -->
+      <div class="grid-label rv">THE TRIP</div>
+      <div class="grid">
+        <div class="cell rv">
+          <div class="clabel"><span class="glyph"></span>ROUTE COMPLETE</div>
+          <div class="num"><span class="seg" data-key="routePct">0</span><span class="unit">%</span></div>
+        </div>
+        <div class="cell rv">
+          <div class="clabel"><span class="glyph"></span>WAYPOINTS LOGGED</div>
+          <div class="num"><span class="seg" data-key="waypoints">0</span><span class="frac" id="wptotal">/58</span></div>
+        </div>
+        <div class="cell rv">
+          <div class="clabel"><span class="glyph"></span>STATES CROSSED</div>
+          <div class="num"><span class="seg" data-key="states">0</span></div>
+        </div>
+        <div class="cell rv">
+          <div class="clabel"><span class="glyph"></span>DAYS ON ROAD</div>
+          <div class="num"><span class="seg" data-key="days">0</span></div>
+        </div>
+      </div>
+
+      <div class="midrule rv"></div>
+
+      <!-- THE POWERTRAIN -->
+      <div class="grid-label rv">THE POWERTRAIN · ZERO GASOLINE</div>
+      <div class="grid">
+        <div class="cell rv">
+          <div class="clabel"><span class="glyph"></span>ENERGY CHARGED</div>
+          <div class="num"><span class="seg" data-key="kwhCharged" data-comma="1">0</span><span class="unit">KWH</span></div>
+        </div>
+        <div class="cell rv">
+          <div class="clabel"><span class="glyph"></span>SUPERCHARGERS</div>
+          <div class="num"><span class="seg" data-key="superchargers">0</span></div>
+        </div>
+        <div class="cell rv">
+          <div class="clabel"><span class="glyph"></span>GAS MONEY SAVED <span class="flex-tag">NO GAS</span></div>
+          <div class="num"><span class="cur">$</span><span class="seg" data-key="gasSaved" data-comma="1">0</span></div>
+        </div>
+        <div class="cell rv">
+          <div class="clabel"><span class="glyph"></span>DRIVE TIME</div>
+          <div class="num"><span class="seg" data-key="driveHrs" data-dec="1">0</span><span class="unit">HRS</span></div>
+        </div>
+      </div>
+
+      <!-- footer -->
+      <div class="foot">
+        <div class="punchrow rv" id="punch"></div>
+        <div class="legcap rv"><b id="legsDoneTxt">6</b> / 6 LEGS FLOWN · LOOP CLOSED</div>
+        <div class="route-cap rv">SPRINGFIELD ↺ MARICOPA STANDBY ↺ SPRINGFIELD</div>
+        <div class="handle rv">@thekevinshow</div>
+      </div>
+
+    </div>
+  </div>
+  </div>
+
+  <button class="replay" id="replay">↻ Replay</button>
+
+<script src="config/overlay-config.js"></script>
+<script src="config/route-geometry.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/telemetry-client.js"></script>
+<script>
+  const client = window.R66;
+  const params = client.params;
+  const STILL = params.has('still');
+  if (STILL) document.body.classList.add('still');
+
+  /* ---------- fit the 1080x1920 stage to the viewport ---------- */
+  const stage = document.querySelector('.stage');
+  function fitStage(){
+    const s = Math.min(window.innerWidth / 1080, window.innerHeight / 1920);
+    stage.style.transform = `scale(${s})`;
+  }
+  window.addEventListener('resize', fitStage);
+  fitStage();
+
+  /* ---------- a completed-loop dataset for standalone / demo preview ----------
+     The shared demo feed emits a MID-trip logbook (good for the live HUD, wrong
+     for a "trip complete" card). So when there's no live bridge we render this
+     finished-loop projection instead, and ignore canned logbook frames. */
+  const FINAL_DEMO = {
+    miles: 3128, routePct: 100, waypoints: 58, totalWaypoints: 58, states: 6, days: 21,
+    kwhCharged: 842, superchargers: 19, gasSaved: 401, driveHrs: 58.4, chargeHrs: 11.7,
+    legsDone: 6, totalLegs: 6,
+  };
+
+  /* ---------- number formatting + count-up (matches logbook.html) ---------- */
+  function fmt(n, comma, dec){
+    if (dec) return Number(n).toFixed(dec);
+    return comma ? Number(Math.round(n)).toLocaleString('en-US') : String(Math.round(n));
+  }
+  function setNow(el, to){
+    el.textContent = fmt(to, el.dataset.comma, Number(el.dataset.dec) || 0);
+  }
+  function countUp(el, to, dur=1100){
+    const comma = el.dataset.comma, dec = Number(el.dataset.dec) || 0;
+    if (STILL || prefersReduced){ setNow(el, to); return; }
+    const from = 0;
+    const token = (Number(el.dataset.tok)||0) + 1; el.dataset.tok = token;
+    const start = performance.now();
+    (function tick(now){
+      if (Number(el.dataset.tok) !== token) return;
+      const t = Math.min(1, (now - start) / dur);
+      const ease = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmt(from + (to - from) * ease, comma, dec);
+      if (t < 1) requestAnimationFrame(tick); else setNow(el, to);
+    })(start);
+  }
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const KEYS = ['miles','routePct','waypoints','states','days','kwhCharged','superchargers','gasSaved','driveHrs'];
+  function targets(d){
+    const o = {}; KEYS.forEach(k => o[k] = d[k] == null ? 0 : +d[k]); return o;
+  }
+
+  /* ---------- route trace from R66_ROUTE (real OSRM geometry) ---------- */
+  function buildRoute(){
+    const R = window.R66_ROUTE;
+    if (!R || !R.legs) return null;
+    let coords = [];
+    R.legs.forEach(l => { if (l.coords) coords = coords.concat(l.coords); });
+    if (coords.length < 2) return null;
+
+    // aspect-correct longitude at the route's mid-latitude so the loop isn't squashed
+    const lats = coords.map(c => c[1]);
+    const midLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+    const kx = Math.cos(midLat * Math.PI / 180);
+    const proj = ([lng, lat]) => [lng * kx, lat];
+
+    const P = coords.map(proj);
+    const xs = P.map(p => p[0]), ys = P.map(p => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const spanX = maxX - minX, spanY = maxY - minY;
+
+    const VW = 1000, PAD = 46;
+    const scale = (VW - PAD * 2) / spanX;
+    const VH = Math.round(spanY * scale + PAD * 2);
+    document.getElementById('routeSvg').setAttribute('viewBox', `0 0 ${VW} ${VH}`);
+
+    const toSvg = ([lng, lat]) => {
+      const [x, y] = proj([lng, lat]);
+      return [PAD + (x - minX) * scale, PAD + (maxY - y) * scale]; // flip Y → north up
+    };
+
+    // downsample for a light path
+    const step = Math.max(1, Math.ceil(coords.length / 900));
+    let d = '';
+    for (let i = 0; i < coords.length; i += step){
+      const [x, y] = toSvg(coords[i]);
+      d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+    }
+    const [lx, ly] = toSvg(coords[coords.length - 1]);
+    d += 'L' + lx.toFixed(1) + ' ' + ly.toFixed(1);
+
+    document.getElementById('routeBase').setAttribute('d', d);
+    const live = document.getElementById('routeLive');
+    live.setAttribute('d', d);
+
+    // node anchors (six leg endpoints)
+    const g = document.getElementById('routeNodes');
+    g.innerHTML = '';
+    const order = ['SPR','AMA','FLG','MCP','ELP','GAR'];
+    order.forEach(code => {
+      const n = R.nodes && R.nodes[code]; if (!n) return;
+      const [x, y] = toSvg([n.lng, n.lat]);
+      const standby = !!n.standby;
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', standby ? 9 : 7);
+      c.setAttribute('class', 'node' + (standby ? ' standby' : ''));
+      g.appendChild(c);
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      // nudge labels away from the loop edges
+      const below = (code === 'MCP' || code === 'ELP');
+      t.setAttribute('x', x); t.setAttribute('y', y + (below ? 26 : -14));
+      t.setAttribute('text-anchor', 'middle'); t.setAttribute('class', 'ncode');
+      t.textContent = standby ? 'MCP·STBY' : code;
+      g.appendChild(t);
+    });
+
+    return { live, length: 0 };
+  }
+
+  function drawRoute(route){
+    if (!route) return;
+    const len = route.live.getTotalLength();
+    route.live.style.strokeDasharray = len;
+    if (STILL || prefersReduced){ route.live.style.strokeDashoffset = 0; return; }
+    route.live.style.strokeDashoffset = len;
+    route.live.getBoundingClientRect(); // reflow
+    route.live.style.transition = 'stroke-dashoffset 2.1s cubic-bezier(.4,.1,.2,1)';
+    route.live.style.strokeDashoffset = 0;
+  }
+
+  /* ---------- leg punch row ---------- */
+  const punch = document.getElementById('punch');
+  function buildPunch(){
+    punch.innerHTML = '';
+    for (let i = 0; i < 6; i++) punch.appendChild(document.createElement('i'));
+  }
+  function fillPunch(legsDone, animate){
+    const cells = punch.querySelectorAll('i');
+    cells.forEach((el, i) => {
+      const fill = i < legsDone;
+      if (!animate || STILL || prefersReduced){ el.classList.toggle('filled', fill); return; }
+      if (fill) setTimeout(() => el.classList.add('filled'), 120 * i);
+    });
+  }
+
+  /* ---------- the reveal sequence ---------- */
+  let played = false;
+  function reveal(d){
+    const t = targets(d);
+    const route = buildRoute();
+    buildPunch();
+    document.getElementById('wptotal').textContent = '/' + (d.totalWaypoints || 58);
+    document.getElementById('legsDoneTxt').textContent = d.legsDone || 6;
+
+    const segs = {};
+    document.querySelectorAll('.seg').forEach(el => { segs[el.dataset.key] = el; });
+
+    if (STILL || prefersReduced){
+      document.querySelectorAll('.rv').forEach(el => el.classList.add('lit'));
+      document.getElementById('stamp').classList.add('lit');
+      KEYS.forEach(k => segs[k] && setNow(segs[k], t[k]));
+      drawRoute(route);
+      fillPunch(d.legsDone || 6, false);
+      return;
+    }
+
+    const lit = (sel, delay) => document.querySelectorAll(sel).forEach(
+      (el, i) => setTimeout(() => el.classList.add('lit'), delay + i * 90));
+    const after = (ms, fn) => setTimeout(fn, ms);
+
+    // masthead
+    after(150,  () => lit('.mast .kicker', 0));
+    after(420,  () => lit('.wordmark', 0));
+    after(780,  () => lit('.subtitle', 0));
+    after(1150, () => document.getElementById('stamp').classList.add('lit'));
+
+    // hero
+    after(1450, () => lit('.hero .hlabel', 0));
+    after(1550, () => countUp(segs.miles, t.miles, 1400));
+    after(1700, () => lit('.hero .hsub', 0));
+
+    // route draws in
+    after(1850, () => { document.getElementById('routeWrap').classList.add('lit'); drawRoute(route); });
+
+    // THE TRIP grid
+    after(2700, () => lit('.grid-label', 0)); // both grid labels stagger together
+    after(2850, () => {
+      document.querySelectorAll('.grid')[0].querySelectorAll('.cell').forEach((c, i) => {
+        setTimeout(() => {
+          c.classList.add('lit');
+          const s = c.querySelector('.seg'); if (s) countUp(s, t[s.dataset.key], 900);
+        }, i * 140);
+      });
+    });
+
+    // THE POWERTRAIN grid
+    after(3550, () => document.querySelector('.midrule').classList.add('lit'));
+    after(3650, () => {
+      document.querySelectorAll('.grid')[1].querySelectorAll('.cell').forEach((c, i) => {
+        setTimeout(() => {
+          c.classList.add('lit');
+          const s = c.querySelector('.seg'); if (s) countUp(s, t[s.dataset.key], 900);
+        }, i * 140);
+      });
+    });
+
+    // footer + legs punch
+    after(4450, () => { document.getElementById('punch').classList.add('lit'); fillPunch(d.legsDone || 6, true); });
+    after(4700, () => lit('.foot .legcap, .foot .route-cap, .foot .handle', 0));
+  }
+
+  function play(d){ if (played) return; played = true; reveal(d); }
+
+  /* ---------- data: prefer LIVE logbook; fall back to FINAL_DEMO ---------- */
+  let live = false;
+  client.on('status', (s) => { if (s && s.connected) live = true; });
+  client.on('logbook', (d) => {
+    if (!d) return;
+    if (live) play(d);            // real end-of-trip numbers off the bridge
+  });
+  // standalone / demo: shared feed won't be "live", so after the fallback window
+  // render the completed-loop projection. (forceDemo via ?demo short-circuits here.)
+  setTimeout(() => { if (!played) play(FINAL_DEMO); }, (client.config.demoFallbackMs || 2500) + 400);
+
+  // replay
+  document.getElementById('replay').addEventListener('click', () => location.reload());
+</script>
+</body>
+</html>

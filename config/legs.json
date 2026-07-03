@@ -17,6 +17,6 @@
     { "leg": 3, "title": "Flagstaff, AZ to Maricopa, AZ",   "from": "FLG", "to": "MCP", "start_landmark_id": "montezuma_castle",  "end_landmark_id": "stay_maricopa", "standby": true },
     { "leg": 4, "title": "Maricopa, AZ to El Paso, TX",     "from": "MCP", "to": "ELP", "start_landmark_id": "picacho_peak",      "end_landmark_id": "stay_elpaso" },
     { "leg": 5, "title": "El Paso, TX to Garland, TX",      "from": "ELP", "to": "GAR", "start_landmark_id": "sc_vanhorn",        "end_landmark_id": "stay_garland" },
-    { "leg": 6, "title": "Garland, TX to Springfield, MO",  "from": "GAR", "to": "SPR", "start_landmark_id": "sc_royse",          "end_landmark_id": "springfield_home" }
+    { "leg": 6, "title": "Garland, TX to Springfield, MO (via Paris, TX)",  "from": "GAR", "to": "SPR", "start_landmark_id": "paris_tx",          "end_landmark_id": "springfield_home" }
   ]
 }

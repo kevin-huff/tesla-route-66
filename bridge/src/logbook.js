@@ -10,8 +10,9 @@ export function deriveLogbook(route, store, cfg) {
   const s = store.get();
   const visited = new Set(s.visited);
 
-  // states crossed — distinct US state codes among visited landmarks
-  const states = new Set();
+  // states crossed — distinct US state codes among visited landmarks, plus codes the
+  // Postgres poller derived from TeslaMate's geocoded drive addresses (statesSeen)
+  const states = new Set(s.statesSeen || []);
   for (const lm of route.route) {
     if (visited.has(lm.id)) for (const code of lm.states || []) states.add(code);
   }
@@ -22,10 +23,15 @@ export function deriveLogbook(route, store, cfg) {
       ? Math.max(0, round(kmToMi(s.lastOdometerKm - s.odometerBaselineKm)))
       : 0;
 
-  // superchargers docked — count of visited supercharger landmarks
-  const superchargers = route.route.filter(
+  // superchargers docked — fast-charge stops counted from TeslaMate Postgres when the
+  // poller is running (live; catches off-plan chargers like Sand Springs), else the
+  // visited supercharger landmarks (demo / PG down)
+  const landmarkScs = route.route.filter(
     (lm) => visited.has(lm.id) && lm.type === 'supercharger',
   ).length;
+  const superchargers = s.fastChargeStops != null
+    ? Math.max(s.fastChargeStops, landmarkScs)
+    : landmarkScs;
 
   // gas stations bypassed — the EV flex. floor(miles / avg ICE tank range).
   const avgTank = cfg?.trip?.avgIceTankRangeMi || 29;
