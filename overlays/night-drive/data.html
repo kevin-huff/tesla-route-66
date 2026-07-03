@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ND · Data Scene</title>
+<link rel="stylesheet" href="../vendor/maplibre-gl.css" />
+<link rel="stylesheet" href="nd-tokens.css" />
+<style>
+  /* DATA scene — full-screen charcoal stats page; the camera becomes a panel.
+     The camera rect is a genuine transparent hole (OBS camera sits underneath),
+     cut from the surface via an evenodd clip-path set in JS. */
+  .bg { position: absolute; inset: 0; background: var(--surface-base); }
+  .page { position: absolute; inset: 0; padding: 64px; display: flex; flex-direction: column; }
+
+  .head { display: flex; align-items: flex-start; }
+  .head .mode-chip {
+    margin-left: 28px; margin-top: 8px;
+    color: var(--text-secondary);
+    letter-spacing: .18em; font-size: 13px;
+  }
+  .head .spacer { flex: 1; }
+  .live-tier { display: flex; align-items: center; }
+  .lt-cell { padding: 0 44px; border-left: 1px solid var(--hairline); }
+  .lt-cell:first-child { border-left: none; }
+  .lt-cell .c-label { margin-bottom: 8px; }
+  .lt-cell .c-value {
+    font: 500 36px var(--font-data); font-variant-numeric: tabular-nums;
+    color: var(--text-primary); line-height: 1; white-space: nowrap;
+  }
+  .lt-cell.state { position: relative; }
+  .lt-cell.state .c-value { font-weight: 600; font-size: 44px; }
+  .lt-cell.state .c-value.idle { color: var(--text-dim); }
+  .lt-cell.state .c-label.riding { color: var(--volt); }
+  .lt-cell.state .nd-pulse { position: absolute; left: 44px; right: 44px; bottom: -14px; }
+  .lt-cell .c-unit { font: 500 15px var(--font-data); color: var(--text-secondary); margin-left: 6px; }
+
+  .head-rule { height: 1px; background: var(--hairline); margin-top: 26px; }
+
+  .body { display: flex; gap: 44px; margin-top: 30px; flex: 1; min-height: 0; }
+  .col-left { width: 1060px; flex: none; display: flex; flex-direction: column; min-height: 0; }
+  .cam {
+    position: relative; width: 1060px; height: 596px; flex: none;
+    border: 1px solid var(--hairline); border-radius: var(--r-chip);
+  }
+  .cam .nd-chip { position: absolute; top: 14px; left: 14px; color: var(--text-primary); }
+
+  .rides-block { flex: 1; display: flex; flex-direction: column; margin-top: 22px; min-height: 0; }
+  .rides-head { display: flex; align-items: baseline; }
+  .rides-head .cap { margin-left: auto; font: 500 13px var(--font-data); letter-spacing: .18em; color: var(--text-secondary); }
+  .ride-rows { flex: 1; display: flex; flex-direction: column; margin-top: 6px; min-height: 0; }
+  .ride-row {
+    flex: 1; display: grid; grid-template-columns: 90px 1fr auto 120px;
+    gap: 24px; align-items: center;
+    border-top: 1px solid var(--hairline-55);
+  }
+  .ride-row .rr-n { font: 500 17px var(--font-data); color: var(--text-secondary); }
+  .ride-row .rr-dur { font: 500 20px var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  .ride-row .rr-fare { font: 700 20px var(--font-data); color: var(--volt); }
+  .ride-row .rr-tip { font: 500 17px var(--font-data); color: var(--volt-dim); text-align: right; }
+
+  .col-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .earn-label { margin-bottom: 12px; }
+  .kpi-row { display: flex; align-items: baseline; gap: 44px; margin-top: 26px; }
+  .kpi .c-label { margin-bottom: 8px; }
+  .kpi .c-value { font: 500 36px var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-primary); line-height: 1; }
+  .kpi .pace { font: 600 27px var(--font-data); color: var(--volt); }
+  .kpi .per { font: 500 14px var(--font-data); color: var(--text-secondary); }
+  .best-chip {
+    display: inline-block; margin-left: 12px;
+    font: 600 13px var(--font-label); letter-spacing: .2em; color: var(--volt);
+    opacity: 0; transition: opacity 500ms ease;
+  }
+  .best-chip.flash { opacity: 1; }
+  .rule { height: 1px; background: var(--hairline); margin: 26px 0; }
+  .split-row { display: flex; align-items: center; gap: 18px; }
+  .split-row .t { font: 500 24px var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-primary); white-space: nowrap; }
+  .split-row .t.gray { color: var(--text-secondary); }
+  .nd-split { flex: 1; }
+  .meta-lines { margin-top: 22px; display: flex; flex-direction: column; gap: 10px; }
+  .meta-lines .line { font: 500 14px var(--font-data); letter-spacing: .08em; color: var(--text-secondary); }
+  .meta-lines .line b { color: var(--text-primary); font-weight: 500; }
+  .map-panel { flex: 1; min-height: 300px; margin-top: 26px; }
+</style>
+</head>
+<body>
+  <div class="bg" id="bg"></div>
+  <div class="page">
+    <div class="head">
+      <div class="nd-wordmark" id="wordmark">
+        <div class="wm-title">THE KEVIN SHOW</div>
+        <div class="wm-sub"><span class="nd-dot blink" id="wmDot"></span><span id="wmSub">LIVE · NIGHT DRIVE</span></div>
+      </div>
+      <span class="nd-chip mode-chip">PARKED · DATA VIEW</span>
+      <div class="spacer"></div>
+      <div class="live-tier freezeable">
+        <div class="lt-cell state">
+          <div class="c-label nd-label" id="stateLabel">IDLE</div>
+          <div class="c-value idle num" id="stateClock">0:00</div>
+          <div class="nd-pulse" id="statePulse"></div>
+        </div>
+        <div class="lt-cell">
+          <div class="c-label nd-label">SHIFT</div>
+          <div class="c-value num" id="shiftClock">0:00:00</div>
+        </div>
+        <div class="lt-cell">
+          <div class="c-label nd-label">SPEED</div>
+          <div class="c-value num"><span id="speed">0</span><span class="c-unit">MPH</span></div>
+        </div>
+        <div class="lt-cell">
+          <div class="c-label nd-label">TEMP</div>
+          <div class="c-value num"><span id="temp">--</span><span class="c-unit">°F</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="head-rule"></div>
+
+    <div class="body">
+      <div class="col-left">
+        <div class="cam" id="cam">
+          <span class="nd-chip"><span class="nd-dot blink"></span>CAM · MAIN</span>
+        </div>
+        <div class="rides-block freezeable">
+          <div class="rides-head">
+            <span class="nd-label">LAST RIDES</span>
+            <span class="cap">FULL LOG · DASHBOARD</span>
+          </div>
+          <div class="ride-rows" id="rideRows"></div>
+        </div>
+      </div>
+
+      <div class="col-right freezeable">
+        <div class="earn-label nd-label">EARNINGS TODAY</div>
+        <div class="nd-odo" id="odo"></div>
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="c-label nd-label">RIDES</div>
+            <div class="c-value num" id="rides">0</div>
+          </div>
+          <div class="kpi">
+            <div class="c-label nd-label">PACE</div>
+            <div class="pace num"><span id="pace">$0.00</span><span class="per">/HR</span><span class="best-chip" id="bestChip">◆ BEST</span></div>
+          </div>
+        </div>
+        <div class="rule"></div>
+        <div class="split-row">
+          <span class="t" id="rideTime">0:00</span>
+          <div class="nd-split"><div class="fill" id="splitFill" style="width:50%"></div></div>
+          <span class="t gray" id="idleTime">0:00</span>
+        </div>
+        <div class="meta-lines">
+          <div class="line" id="monthLine">MONTH — <b>$0.00 · 0 RIDES · 0:00 HRS</b></div>
+          <div class="line" id="bestsLine">BESTS — <b>$0.00/HR · $0.00 DAY</b></div>
+        </div>
+        <div class="map-panel" id="mapPanel"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dev">
+    <button onclick="document.body.classList.toggle('stale'); syncStale()">stale</button>
+  </div>
+
+<script src="config/nd-config.js"></script>
+<script src="config/map-style-night.js"></script>
+<script src="../vendor/maplibre-gl.js"></script>
+<script src="js/nd-ui.js"></script>
+<script src="js/nd-demo.js"></script>
+<script src="js/nd-client.js"></script>
+<script src="js/nd-map.js"></script>
+<script>
+(function () {
+  const { fmt, createOdometer, pulse, createTimers } = ND_UI;
+  const $ = (id) => document.getElementById(id);
+
+  // punch the camera hole out of the charcoal surface (evenodd clip-path)
+  function cutCameraHole() {
+    const r = $('cam').getBoundingClientRect();
+    const rr = 3;
+    $('bg').style.clipPath =
+      `path(evenodd, "M0 0 H1920 V1080 H0 Z ` +
+      `M${r.left + rr} ${r.top} H${r.right - rr} Q${r.right} ${r.top} ${r.right} ${r.top + rr} ` +
+      `V${r.bottom - rr} Q${r.right} ${r.bottom} ${r.right - rr} ${r.bottom} H${r.left + rr} ` +
+      `Q${r.left} ${r.bottom} ${r.left} ${r.bottom - rr} V${r.top + rr} Q${r.left} ${r.top} ${r.left + rr} ${r.top} Z")`;
+  }
+  addEventListener('load', cutCameraHole);
+  addEventListener('resize', cutCameraHole);
+
+  const odo = createOdometer($('odo'));
+  odo.setCents(0);
+  ND_MAP.attach($('mapPanel'), ND);
+
+  let cur = null;
+  let lastBestHour = null;
+  const timers = createTimers(ND.serverNow);
+  timers.register($('stateClock'), () => cur?.ride?.startedAt || cur?.idleStartedAt || null, fmt.mss);
+  timers.register($('shiftClock'), () => (cur?.shift?.status === 'live' ? cur.shift.startedAt : null), fmt.hmmss, '0:00:00');
+
+  function renderRows(rides) {
+    const el = $('rideRows');
+    el.textContent = '';
+    for (const r of (rides || []).slice(0, 5)) {
+      const row = document.createElement('div');
+      row.className = 'ride-row';
+      row.innerHTML =
+        `<span class="rr-n">#${r.n}</span>` +
+        `<span class="rr-dur">${fmt.mss(r.durSec)}</span>` +
+        `<span class="rr-fare">${fmt.usd(r.fareCents)}</span>` +
+        `<span class="rr-tip">${r.tipCents ? `+${fmt.usd(r.tipCents)}` : ''}</span>`;
+      el.appendChild(row);
+    }
+  }
+
+  function render(stats, ticker, animateNewest = false) {
+    cur = stats;
+    const riding = !!stats.ride;
+    $('stateLabel').textContent = riding ? 'RIDE · TRIP TIME' : 'IDLE';
+    $('stateLabel').classList.toggle('riding', riding);
+    $('stateClock').classList.toggle('idle', !riding);
+    odo.setCents(stats.today.earningsCents);
+    $('rides').textContent = stats.today.rides;
+    $('pace').textContent = fmt.usd(stats.today.paceCentsPerHr);
+    $('rideTime').textContent = fmt.hmm(stats.today.rideSec);
+    $('idleTime').textContent = fmt.hmm(stats.today.idleSec);
+    const tot = stats.today.rideSec + stats.today.idleSec;
+    $('splitFill').style.width = tot ? `${(stats.today.rideSec / tot) * 100}%` : '0%';
+    $('monthLine').innerHTML =
+      `MONTH — <b>${fmt.usd(stats.month.earningsCents)} · ${stats.month.rides} RIDES · ${fmt.hmm(stats.month.shiftSec)} HRS</b>`;
+    $('bestsLine').innerHTML =
+      `BESTS — <b>${fmt.usd(stats.bests.hourCents)}/HR · ${fmt.usd(stats.bests.dayCents)} DAY</b>`;
+    if (ticker) renderRows(ticker);
+    if (animateNewest && $('rideRows').firstChild) $('rideRows').firstChild.classList.add('nd-enter');
+    // ◆ BEST chip flash when the hour-pace record moves
+    if (lastBestHour != null && stats.bests.hourCents > lastBestHour) {
+      $('bestChip').classList.add('flash');
+      setTimeout(() => $('bestChip').classList.remove('flash'), 4000);
+    }
+    lastBestHour = stats.bests.hourCents;
+    timers.tick();
+  }
+
+  ND.on('ride', (d) => render(d.stats, d.ticker));
+  ND.on('stats_tick', (d) => render(d.stats, d.ticker));
+  ND.on('shift_started', (d) => { render(d.stats, d.ticker); pulse($('statePulse')); });
+  ND.on('ride_started', (d) => { render(d.stats, d.ticker); pulse($('statePulse')); });
+  ND.on('ride_ended', (d) => { render(d.stats, d.ticker, true); pulse($('statePulse')); });
+  ND.on('tip_added', (d) => { render(d.stats, d.ticker); pulse($('statePulse')); });
+  ND.on('shift_ended', (d) => render(d.stats));
+
+  ND.on('telemetry', (t) => {
+    if (!document.body.classList.contains('stale')) $('speed').textContent = Math.round(t.speedMph || 0);
+    if (t.outsideF != null) $('temp').textContent = Math.round(t.outsideF);
+  });
+
+  window.syncStale = function () {
+    const stale = document.body.classList.contains('stale');
+    $('wmDot').className = `nd-dot ${stale ? 'amber' : 'blink'}`;
+    $('wmSub').textContent = stale ? 'RECONNECTING · DATA HELD' : 'LIVE · NIGHT DRIVE';
+    $('wordmark').classList.toggle('stale', stale);
+    document.querySelectorAll('.freezeable').forEach((el) => el.classList.toggle('nd-freeze', stale));
+    if (stale) $('speed').textContent = '––';
+  };
+  ND.on('stale', ({ stale }) => { document.body.classList.toggle('stale', stale); syncStale(); });
+})();
+</script>
+</body>
+</html>

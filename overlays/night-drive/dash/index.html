@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#101215" />
+<title>Night Drive</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+
+<!-- P·5 pre-shift -->
+<section class="screen" id="s-pre">
+  <div class="head">
+    <span class="wm">THE KEVIN SHOW<span class="dot off"></span></span>
+    <span class="hclock num" id="preNow"></span>
+  </div>
+  <div class="pre-center">
+    <div class="label">NO ACTIVE SHIFT</div>
+    <div class="zero num">0:00:00</div>
+  </div>
+  <div class="pre-stats">
+    <div class="line">LAST SHIFT <b class="num" id="preLast">—</b></div>
+    <div class="line">MONTH <b class="num" id="preMonth">—</b></div>
+  </div>
+  <button class="btn primary big" id="btnStartShift">START SHIFT</button>
+  <div class="util">
+    <span class="label">MAP</span>
+    <button data-mode="nav">NAV</button>
+    <button data-mode="route">ROUTE</button>
+    <button data-mode="heat">HEAT</button>
+    <span class="gap"></span>
+    <button id="btnToken1" class="tokenBtn">TOKEN</button>
+  </div>
+</section>
+
+<!-- P·1 home / shift live -->
+<section class="screen" id="s-home">
+  <div class="head">
+    <span class="wm">THE KEVIN SHOW<span class="dot" id="homeDot"></span><span class="qbadge" id="qbadge">QUEUED</span></span>
+    <span class="hclock num" id="homeShiftClock">0:00:00</span>
+  </div>
+  <div class="state-block">
+    <div class="label" id="homeStateLabel">IDLE</div>
+    <div class="clock num idle" id="homeStateClock">0:00</div>
+    <div class="pulse" id="homePulse"></div>
+  </div>
+  <div class="strip">
+    <div class="grp">
+      <span class="label">EARNINGS</span>
+      <span class="earn num" id="homeEarn">$0.00</span>
+    </div>
+    <div class="grp">
+      <span class="label">RIDES</span>
+      <span class="rides num" id="homeRides">0</span>
+    </div>
+    <div class="grp">
+      <span class="label">PACE</span>
+      <span class="pace num"><span id="homePace">$0.00</span><span class="u">/HR</span></span>
+    </div>
+  </div>
+  <div style="margin-top:18px">
+    <button class="btn outline" id="btnRide">START RIDE</button>
+    <div class="btn-row">
+      <button class="btn secondary" id="btnTip">ADD TIP</button>
+      <button class="btn secondary" id="btnEndShift">END SHIFT</button>
+    </div>
+  </div>
+  <div class="list-label">
+    <span class="label">LAST RIDES</span>
+    <span class="cap" id="capCount"></span>
+  </div>
+  <div class="ride-list" id="homeRideList"></div>
+  <div class="spacer"></div>
+  <div class="util">
+    <span class="label">MAP</span>
+    <button data-mode="nav">NAV</button>
+    <button data-mode="route">ROUTE</button>
+    <button data-mode="heat">HEAT</button>
+    <span class="gap"></span>
+    <button id="btnResend">RESEND CHAT</button>
+  </div>
+</section>
+
+<!-- P·2 end ride / fare -->
+<section class="screen" id="s-fare">
+  <div class="head"><span class="wm">END RIDE</span><span class="hclock num" id="fareMeta"></span></div>
+  <div class="fare-display num" id="fareDisplay">$0.00</div>
+  <div class="keypad" id="fareKeypad"></div>
+  <div class="spacer"></div>
+  <button class="btn save" id="btnSaveRide" disabled>SAVE RIDE</button>
+  <button class="btn ghost" id="btnFareCancel" style="margin-top:8px">CANCEL</button>
+</section>
+
+<!-- P·3 add tip -->
+<section class="screen" id="s-tip">
+  <div class="head"><span class="wm">ADD TIP</span></div>
+  <div class="label" style="margin-top:18px">TAP A RIDE</div>
+  <div class="tip-cards" id="tipCards"></div>
+  <div class="label" style="margin-top:20px">TIP AMOUNT</div>
+  <div class="fare-display small num" id="tipDisplay">$0.00</div>
+  <div class="keypad small" id="tipKeypad"></div>
+  <div class="spacer"></div>
+  <button class="btn apply" id="btnApplyTip" disabled>APPLY TIP</button>
+  <button class="btn ghost" id="btnTipCancel" style="margin-top:8px">CANCEL</button>
+</section>
+
+<!-- P·4 shift summary -->
+<section class="screen" id="s-summary">
+  <div class="head"><span class="wm" style="color:var(--volt)">SHIFT COMPLETE</span><span class="hclock num" id="sumDate"></span></div>
+  <div class="sum-card">
+    <div class="micro">THE KEVIN SHOW · NIGHT DRIVE</div>
+    <div class="earn num" id="sumEarn">$0.00</div>
+    <div class="kpis">
+      <div><div class="v num" id="sumRides">0</div><div class="k label">RIDES</div></div>
+      <div><div class="v num" id="sumHours">0:00</div><div class="k label">HOURS</div></div>
+      <div><div class="v num" id="sumPace">$0.00</div><div class="k label">PACE/HR</div></div>
+    </div>
+    <div class="split"><div class="fill" id="sumSplit" style="width:0%"></div></div>
+    <div class="split-t"><span id="sumRideT">RIDE 0:00</span><span id="sumIdleT">IDLE 0:00</span></div>
+    <div class="bests" id="sumBests"></div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn apply" id="btnShare">SHARE RECAP</button>
+  <button class="btn ghost" id="btnCloseShift" style="margin-top:8px">CLOSE</button>
+</section>
+
+<div class="toast num" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

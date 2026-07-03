@@ -51,7 +51,7 @@ export function parseNowPlaying(b = {}) {
   };
 }
 
-export function createHub({ config, state, store, route, replay }) {
+export function createHub({ config, state, store, route, replay, ride = null }) {
   const startedAt = Date.now();
   let seq = 0;
   let txGen = null; // set by index.js when the LLM generator is enabled
@@ -72,6 +72,9 @@ export function createHub({ config, state, store, route, replay }) {
       lastTransmission: state.lastTransmission,
       trail: store.get().trail || [], // breadcrumb seed for the map overlay
       nowPlaying: state.nowPlaying,
+      // Night Drive ride tracker (privacy-filtered by construction — no coordinates
+      // beyond the zone-clamped NAV position ever appear in a snapshot)
+      ride: ride ? ride.tracker.publicSnapshot() : null,
     };
   }
 
@@ -134,6 +137,13 @@ export function createHub({ config, state, store, route, replay }) {
         'access-control-allow-headers': 'content-type',
       });
       return res.end();
+    }
+
+    // ---- ride tracker REST (Night Drive) ----
+    if (ride && p.startsWith('/api/ride/')) {
+      return ride.routes
+        .handle(req, res, url, { json, readBody })
+        .catch((e) => json(res, 500, { ok: false, error: String((e && e.message) || e) }));
     }
 
     // ---- REST ----
@@ -221,6 +231,7 @@ export function createHub({ config, state, store, route, replay }) {
     const root = config.paths.overlays;
     let rel = decodeURIComponent(p);
     if (rel === '/' || rel === '') rel = '/index.html';
+    if (rel.endsWith('/')) rel += 'index.html'; // directory URLs (PWA at /night-drive/dash/)
     const full = path.normalize(path.join(root, rel));
     if (!full.startsWith(path.normalize(root))) return json(res, 403, { error: 'forbidden' });
     fs.readFile(full, (err, buf) => {

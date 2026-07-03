@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ND · Shift Recap</title>
+<link rel="stylesheet" href="../vendor/maplibre-gl.css" />
+<link rel="stylesheet" href="nd-tokens.css" />
+<style>
+  /* RECAP — end-of-shift summary over the dimmed camera. Hidden until
+     shift_ended arrives; OBS can keep this scene loaded permanently. */
+  body { background: transparent; }
+  .scrim {
+    position: absolute; inset: 0;
+    background: var(--scrim-72);
+    background: rgba(10, 12, 15, 0.6);
+    opacity: 0; transition: opacity 300ms ease;
+    pointer-events: none;
+  }
+  body.show .scrim { opacity: 1; }
+
+  .wordmark-slot { position: absolute; top: 64px; left: 72px; opacity: 0; transition: opacity 300ms ease; }
+  body.show .wordmark-slot { opacity: 1; }
+
+  .card-slot {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: 920px;
+    background: rgba(14, 16, 19, 0.94);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-card);
+    padding: 44px;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity var(--t-panel) ease-out, transform var(--t-panel) ease-out;
+  }
+  body.show .card { opacity: 1; transform: translateY(0); }
+
+  .card .head { display: flex; align-items: baseline; }
+  .card .head .title { font: 600 16px var(--font-label); letter-spacing: .26em; color: var(--volt); }
+  .card .head .meta { margin-left: auto; font: 500 15px var(--font-data); color: var(--text-secondary); }
+
+  .card .cols { display: flex; gap: 44px; margin-top: 34px; }
+  .col-stats { flex: 1; min-width: 0; }
+  .earn-label { margin-bottom: 10px; }
+  .earn { font: 600 66px var(--font-data); font-variant-numeric: tabular-nums; color: var(--volt); line-height: 1; }
+
+  .kpis { display: flex; margin-top: 34px; }
+  .kpi { padding: 0 34px; border-left: 1px solid var(--hairline); }
+  .kpi:first-child { border-left: none; padding-left: 0; }
+  .kpi .c-label { margin-bottom: 8px; }
+  .kpi .c-value { font: 500 30px var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-primary); line-height: 1; }
+
+  .split-row { display: flex; align-items: center; gap: 16px; margin-top: 34px; }
+  .split-row .t { font: 500 20px var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-primary); white-space: nowrap; }
+  .split-row .t.gray { color: var(--text-secondary); }
+  .nd-split { flex: 1; }
+
+  .bests { margin-top: 26px; font: 500 14px var(--font-data); letter-spacing: .08em; color: var(--text-secondary); }
+  .bests b { color: var(--text-primary); font-weight: 500; }
+
+  .chat-chip {
+    display: inline-block; margin-top: 26px;
+    font: 600 14px var(--font-data); letter-spacing: .14em; color: var(--volt);
+    border: 1px solid var(--volt-40); border-radius: var(--r-chip);
+    padding: 8px 14px;
+  }
+
+  .thumb { width: 340px; flex: none; display: flex; }
+  .thumb .nd-map { flex: 1; min-height: 340px; }
+</style>
+</head>
+<body>
+  <div class="scrim"></div>
+  <div class="wordmark-slot">
+    <div class="nd-wordmark">
+      <div class="wm-title">THE KEVIN SHOW</div>
+      <div class="wm-sub"><span class="nd-dot gray"></span><span>SHIFT ENDED · NIGHT DRIVE</span></div>
+    </div>
+  </div>
+
+  <div class="card-slot">
+    <div class="card">
+      <div class="head">
+        <span class="title">SHIFT COMPLETE</span>
+        <span class="meta" id="meta">—</span>
+      </div>
+      <div class="cols">
+        <div class="col-stats">
+          <div class="earn-label nd-label">EARNINGS</div>
+          <div class="earn num" id="earn">$0.00</div>
+          <div class="kpis">
+            <div class="kpi"><div class="c-label nd-label">RIDES</div><div class="c-value num" id="rides">0</div></div>
+            <div class="kpi"><div class="c-label nd-label">HOURS</div><div class="c-value num" id="hours">0:00</div></div>
+            <div class="kpi"><div class="c-label nd-label">PACE</div><div class="c-value num" id="pace">$0.00/HR</div></div>
+          </div>
+          <div class="split-row">
+            <span class="t" id="rideTime">0:00</span>
+            <div class="nd-split"><div class="fill" id="splitFill" style="width:0%"></div></div>
+            <span class="t gray" id="idleTime">0:00</span>
+          </div>
+          <div class="bests" id="bests">BESTS — <b>$0.00/HR · $0.00 DAY</b></div>
+          <div class="chat-chip">!recap</div>
+        </div>
+        <div class="thumb"><div id="routeThumb"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dev">
+    <button onclick="document.body.classList.toggle('show')">show</button>
+  </div>
+
+<script src="config/nd-config.js"></script>
+<script src="config/map-style-night.js"></script>
+<script src="../vendor/maplibre-gl.js"></script>
+<script src="js/nd-ui.js"></script>
+<script src="js/nd-demo.js"></script>
+<script src="js/nd-client.js"></script>
+<script src="js/nd-map.js"></script>
+<script>
+(function () {
+  const { fmt } = ND_UI;
+  const $ = (id) => document.getElementById(id);
+
+  const thumb = $('routeThumb');
+  thumb.style.cssText = 'width:340px;height:340px;';
+  ND_MAP.attach(thumb, ND, { staticMode: 'route', rotate: false, modes: ['route'] });
+
+  function show(summary) {
+    $('meta').textContent = `${summary.dateText || ''} · ${fmt.hmmss(summary.shiftSec)}`;
+    $('earn').textContent = fmt.usd(summary.earningsCents);
+    $('rides').textContent = summary.rides;
+    $('hours').textContent = fmt.hmm(summary.shiftSec);
+    $('pace').textContent = `${fmt.usd(summary.paceCentsPerHr)}/HR`;
+    $('rideTime').textContent = fmt.hmm(summary.rideSec);
+    $('idleTime').textContent = fmt.hmm(summary.idleSec);
+    const tot = summary.rideSec + summary.idleSec;
+    setTimeout(() => { $('splitFill').style.width = tot ? `${(summary.rideSec / tot) * 100}%` : '0%'; }, 350);
+    if (summary.bests) {
+      $('bests').innerHTML = `BESTS — <b>${fmt.usd(summary.bests.hourCents)}/HR · ${fmt.usd(summary.bests.dayCents)} DAY</b>`;
+    }
+    document.body.classList.add('show');
+  }
+
+  ND.on('shift_ended', (d) => { if (d.summary) show(d.summary); });
+  // late join: bridge snapshot carries the last recap while the shift is still off
+  ND.on('ride', (d) => {
+    if (d.lastSummary && d.stats?.shift?.status !== 'live') show(d.lastSummary);
+  });
+  ND.on('shift_started', () => document.body.classList.remove('show'));
+})();
+</script>
+</body>
+</html>

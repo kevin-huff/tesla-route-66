@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#101215"/>
+  <circle cx="256" cy="236" r="26" fill="#C8F542"/>
+  <circle cx="256" cy="236" r="64" fill="none" stroke="#C8F542" stroke-width="10" opacity="0.45"/>
+  <text x="256" y="404" text-anchor="middle" font-family="monospace" font-size="72" font-weight="700" letter-spacing="10" fill="#F2F4F6">TKS</text>
+</svg>

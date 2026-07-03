@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "demo": "R66_MODE=demo node src/index.js",
+    "demo:night": "R66_MODE=night-demo node src/index.js",
     "live": "R66_MODE=live node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test"

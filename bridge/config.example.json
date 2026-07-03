@@ -49,7 +49,8 @@
     "intervalSec": 300,
     "kickoffSec": 20,
     "drivingOnly": true,
-    "minMoveMi": 3,
+    "minMoveMi": 5,
+    "recentPlaces": 6,
     "llm": {
       "baseUrl": "http://localhost:8484/v1",
       "apiKey": "",
@@ -86,5 +87,37 @@
     "startLeg": 1,
     "cruiseMph": 64,
     "startBatteryPct": 92
+  },
+
+  "ride": {
+    "enabled": true,
+    "authToken": "CHANGE_ME",
+    "storage": "auto",
+    "pgSchema": "ride_tracker",
+    "timezone": "America/Chicago",
+    "statsTickSec": 5,
+    "shiftStartsAt": "9:00 PM",
+    "privacy": {
+      "lat": null,
+      "lng": null,
+      "radiusM": 800
+    },
+    "heat": {
+      "binM": 250
+    },
+    "path": {
+      "minMoveM": 40,
+      "maxPoints": 4000
+    },
+    "demo": {
+      "center": { "lat": 37.2090, "lng": -93.2923 },
+      "home": { "lat": 37.1885, "lng": -93.3110 },
+      "tickMs": 250,
+      "rideSecMin": 18,
+      "rideSecMax": 40,
+      "idleSecMin": 6,
+      "idleSecMax": 14,
+      "ridesPerShift": 8
+    }
   }
 }

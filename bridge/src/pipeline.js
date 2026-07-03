@@ -15,7 +15,7 @@ import { pad2, fmtLat, fmtLng, fmtTime } from './format.js';
 const TRAIL_MIN_M = 300;
 const TRAIL_MAX_POINTS = 2500;
 
-export function createPipeline({ cfg, route, store, state, hub }) {
+export function createPipeline({ cfg, route, store, state, hub, privacyZone = null }) {
   const geofence = createGeofence(route, store);
   // whether geofence entries feed the Transmission Card. "llm" hands the card to the LLM
   // generator instead (geofences still drive legs/logbook/events). Default keeps old behavior.
@@ -50,9 +50,15 @@ export function createPipeline({ cfg, route, store, state, hub }) {
   // Broadcast a fully-formed transmission and schedule its return to idle. Shared by the
   // geofence path and the LLM generator (via the returned handle).
   function emitTransmission(tx) {
+    tx.at = Date.now(); // fired-at epoch ms — lets a reconnecting overlay skip stale replays
     state.lastTransmission = tx;
     store.get().lastTransmission = tx;
     hub.broadcast('transmission', tx);
+    // Streamerbot hook: same content, pre-formatted for Twitch chat (500-char IRC limit)
+    hub.broadcast('event:transmission', {
+      id: tx.id, place: tx.place, body: tx.body, leg: tx.leg, type_: tx.type_,
+      chatText: `${tx.header} :: ${tx.body}`.slice(0, 490),
+    });
     // the overlay owns auto-hide timing (transmissionDwellMs) so it works on reconnect too
   }
 
@@ -126,6 +132,14 @@ export function createPipeline({ cfg, route, store, state, hub }) {
     t.outsideF = round(cToF(snap.outsideTempC));
     t.lat = snap.lat;
     t.lng = snap.lng;
+    // Night Drive home zone: the broadcast/snapshot telemetry (and the persisted
+    // trail derived from it below) must never carry an in-zone coordinate. Geofence
+    // and leg logic below intentionally keep using the raw snap position.
+    if (privacyZone?.enabled && privacyZone.inside(t.lat, t.lng)) {
+      const c = privacyZone.clamp(t.lat, t.lng);
+      t.lat = c.lat;
+      t.lng = c.lng;
+    }
     t.state = snap.state;
     t.pluggedIn = !!snap.pluggedIn;
     t.chargerKw = round(snap.chargerPowerKw || 0, 1);
@@ -170,8 +184,10 @@ export function createPipeline({ cfg, route, store, state, hub }) {
 
     for (const lm of geofence.check(snap.lat, snap.lng)) onLandmarkEnter(lm);
 
+    // t.lat/t.lng (zone-clamped above) — map state is broadcast, so it must not
+    // carry raw in-zone coordinates either
     const map = route.computeMapState({
-      lat: snap.lat, lng: snap.lng, speedMph: t.speedMph, visited: s.visited,
+      lat: t.lat, lng: t.lng, speedMph: t.speedMph, visited: s.visited,
     });
     if (snap.standbyHint) map.standby.active = true;
     Object.assign(state.map, map);
