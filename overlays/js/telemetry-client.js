@@ -45,9 +45,16 @@
       if (d.map) dispatch('map', d.map);
       if (d.logbook) dispatch('logbook', d.logbook);
       if (d.nowPlaying) dispatch('nowplaying', d.nowPlaying);
-      // always re-show the last transmission on (re)connect (OBS refresh / fire-then-open);
-      // the overlay auto-hides it after transmissionDwellMs.
-      if (d.lastTransmission) dispatch('transmission', d.lastTransmission);
+      // re-show the last transmission on (re)connect (OBS refresh / fire-then-open) only
+      // while it would still be on screen — within transmissionDwellMs of when it fired.
+      // Replaying a stale one would put a long-passed place back on stream, out of sync
+      // with the chat post that went out when it actually fired.
+      if (d.lastTransmission) {
+        const tx = d.lastTransmission;
+        const dwell = cfg.transmissionDwellMs || 90000;
+        if (tx.at == null || Date.now() - tx.at < dwell) dispatch('transmission', tx);
+        else last.transmission = tx; // stale: keep for the ▶ Receive preview, don't show
+      }
       dispatch('status', { connected: true, mode: d.mode });
       return;
     }

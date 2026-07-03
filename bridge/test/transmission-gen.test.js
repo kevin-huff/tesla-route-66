@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTransmissionGenerator, parseTransmission, capBody } from '../src/transmission-gen.js';
+import { createTransmissionGenerator, parseTransmission, capBody, ANGLES } from '../src/transmission-gen.js';
 
 const baseCfg = {
   trip: { timezone: 'America/Chicago' },
@@ -66,16 +66,130 @@ test('generator calls the LLM and emits a fully-formed transmission', async () =
   } finally { globalThis.fetch = orig; }
 });
 
-test('drivingOnly skips (no LLM call) when the car is parked/charging', async () => {
+test('drivingOnly skips (no LLM call) when the car is parked/asleep', async () => {
   const orig = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async (...a) => { calls += 1; return reply('{"place":"X","body":"y"}')(...a); };
   try {
     let tx = null;
-    const gen = createTransmissionGenerator({ cfg: baseCfg, state: fakeState({ state: 'charging' }), hub: { setHealth() {} }, emit: (t) => { tx = t; } });
-    await gen.tick();
+    for (const s of ['parked', 'asleep', 'offline']) {
+      const gen = createTransmissionGenerator({ cfg: baseCfg, state: fakeState({ state: s }), hub: { setHealth() {} }, emit: (t) => { tx = t; } });
+      await gen.tick();
+    }
     assert.equal(calls, 0);
     assert.equal(tx, null);
+  } finally { globalThis.fetch = orig; }
+});
+
+test('charging counts as on-the-road: a docked car still transmits (once — move gate holds)', async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = reply('{"place":"SHAMROCK, TX","body":"Docked at the U-Drop Inn."}');
+  try {
+    let tx = null;
+    const gen = createTransmissionGenerator({ cfg: baseCfg, state: fakeState({ state: 'charging' }), hub: { setHealth() {} }, emit: (t) => { tx = t; } });
+    await gen.tick();
+    assert.ok(tx, 'charging emits');
+    tx = null;
+    await gen.tick(); // same spot — minMoveMi gate blocks a repeat while docked
+    assert.equal(tx, null);
+  } finally { globalThis.fetch = orig; }
+});
+
+test('each call carries an angle and avoids recently covered places', async () => {
+  const orig = globalThis.fetch;
+  const sent = [];
+  let n = 0;
+  globalThis.fetch = async (url, opts) => {
+    sent.push(JSON.parse(opts.body));
+    n += 1;
+    return { ok: true, json: async () => ({ choices: [{ message: { content: `{"place":"PLACE ${n}","body":"b"}` } }] }) };
+  };
+  try {
+    const gen = createTransmissionGenerator({ cfg: baseCfg, state: fakeState(), hub: { setHealth() {} }, emit: () => {} });
+    await gen.generateNow();
+    const first = sent[0].messages[1].content;
+    assert.ok(first.includes('ANGLE for this transmission:'), 'angle instruction present');
+    assert.ok(!first.includes('Recent transmissions'), 'no recent list on the first call');
+
+    await gen.generateNow();
+    const second = sent[1].messages[1].content;
+    assert.ok(second.includes('Recent transmissions already covered: PLACE 1'), 'recent places fed back');
+    assert.deepEqual(gen._recent(), ['PLACE 1', 'PLACE 2']);
+  } finally { globalThis.fetch = orig; }
+});
+
+test('angles draw from a shuffle bag: all distinct before any repeats', async () => {
+  const orig = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (url, opts) => {
+    sent.push(JSON.parse(opts.body));
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"place":"X","body":"y"}' } }] }) };
+  };
+  try {
+    const gen = createTransmissionGenerator({ cfg: baseCfg, state: fakeState(), hub: { setHealth() {} }, emit: () => {} });
+    for (let i = 0; i < ANGLES.length; i++) await gen.generateNow();
+    const instructions = sent.map((p) => p.messages[1].content.match(/ANGLE for this transmission: (.+)/)[1]);
+    assert.equal(new Set(instructions).size, ANGLES.length, 'every angle used once before repeating');
+  } finally { globalThis.fetch = orig; }
+});
+
+// minimal route fixture: three waypoints strung along a road path, Amarillo-ish coords
+const fakeRoute = () => ({
+  route: [
+    { id: 'cad', name: 'Cadillac Ranch', header: 'INCOMING TRANSMISSION // CADILLAC RANCH, TX', lat: 35.187, lng: -101.987 },
+    { id: 'adr', name: 'Adrian', header: 'INCOMING TRANSMISSION // ADRIAN, TX', lat: 35.274, lng: -102.673 },
+    { id: 'gle', name: 'Glenrio', header: 'INCOMING TRANSMISSION // GLENRIO, TX/NM', lat: 35.179, lng: -103.039 },
+  ],
+  roadPath: { distById: new Map([['cad', 10000], ['adr', 60000], ['gle', 95000]]) },
+});
+
+test('on-plan prompts carry a route fix: waypoint passed + waypoints ahead, locality rule enforced', async () => {
+  const orig = globalThis.fetch;
+  let sent = null;
+  globalThis.fetch = async (url, opts) => {
+    sent = JSON.parse(opts.body);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"place":"X","body":"y"}' } }] }) };
+  };
+  try {
+    const state = fakeState();
+    state.map.routeDistM = 30000; // ~12 mi past Cadillac Ranch, ~19 before Adrian
+    const gen = createTransmissionGenerator({ cfg: baseCfg, state, hub: { setHealth() {} }, route: fakeRoute(), emit: () => {} });
+    await gen.generateNow();
+    const user = sent.messages[1].content;
+    assert.ok(user.includes('already passed CADILLAC RANCH, TX (12 mi back'), `passed waypoint anchored: ${user}`);
+    assert.ok(user.includes('ahead on the planned road: ADRIAN, TX in 19 mi, then GLENRIO, TX/NM in 40 mi'), `upcoming waypoints anchored: ${user}`);
+    assert.ok(sent.messages[0].content.includes('Stay LOCAL'), 'system prompt carries the locality rule');
+  } finally { globalThis.fetch = orig; }
+});
+
+test('off-plan prompts fall back to the nearest waypoint as a loose anchor', async () => {
+  const orig = globalThis.fetch;
+  let sent = null;
+  globalThis.fetch = async (url, opts) => {
+    sent = JSON.parse(opts.body);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"place":"X","body":"y"}' } }] }) };
+  };
+  try {
+    const state = fakeState({ lat: 35.2, lng: -102.6 }); // near Adrian, but routeDistM unset (off the line)
+    const gen = createTransmissionGenerator({ cfg: baseCfg, state, hub: { setHealth() {} }, route: fakeRoute(), emit: () => {} });
+    await gen.generateNow();
+    const user = sent.messages[1].content;
+    assert.ok(user.includes('nearest planned waypoint is ADRIAN, TX'), `nearest waypoint named: ${user}`);
+  } finally { globalThis.fetch = orig; }
+});
+
+test('no route handle (tests / minimal boot) means no route fix and no crash', async () => {
+  const orig = globalThis.fetch;
+  let sent = null;
+  globalThis.fetch = async (url, opts) => {
+    sent = JSON.parse(opts.body);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"place":"X","body":"y"}' } }] }) };
+  };
+  try {
+    const gen = createTransmissionGenerator({ cfg: baseCfg, state: fakeState(), hub: { setHealth() {} }, emit: () => {} });
+    const r = await gen.generateNow();
+    assert.equal(r.ok, true);
+    assert.ok(!sent.messages[1].content.includes('Route fix:'));
   } finally { globalThis.fetch = orig; }
 });
 

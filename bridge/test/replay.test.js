@@ -52,15 +52,17 @@ test('demo replay completes a full loop and emits the whole contract', () => {
   assert.ok(looped, 'replay completed a loop');
 
   const types = new Set(events.map((e) => e.type));
-  for (const t of ['telemetry', 'map', 'logbook', 'transmission',
+  for (const t of ['telemetry', 'map', 'logbook', 'transmission', 'event:transmission',
                    'event:landmarkEntered', 'event:legComplete', 'event:lowBattery']) {
     assert.ok(types.has(t), `contract: expected a "${t}" message`);
   }
 
   // every landmark fires a transmission exactly once
-  const txIds = events.filter((e) => e.type === 'transmission').map((e) => e.data.id);
+  const txs = events.filter((e) => e.type === 'transmission').map((e) => e.data);
+  const txIds = txs.map((t) => t.id);
   assert.equal(new Set(txIds).size, txIds.length, 'no duplicate transmissions');
   assert.equal(txIds.length, route.route.length, 'one transmission per landmark');
+  assert.ok(txs.every((t) => t.at > 0), 'transmissions carry a fired-at stamp (reconnect freshness)');
 
   // telemetry contract: SC margin while driving, charge fields while docked
   const teles = events.filter((e) => e.type === 'telemetry').map((e) => e.data);
@@ -105,8 +107,8 @@ test('logbook counters climb over the trip', () => {
   assert.ok(final.stationsBypassed > 0);
   assert.ok(final.elevationFt > 0);
   // THE TRIP page
-  assert.equal(final.waypoints, 58, 'every waypoint logged by loop end');
-  assert.equal(final.totalWaypoints, 58);
+  assert.equal(final.waypoints, 53, 'every waypoint logged by loop end');
+  assert.equal(final.totalWaypoints, 53);
   assert.ok(final.routePct >= 95, `route % completes (got ${final.routePct})`);
   assert.ok(final.days >= 1);
   // POWERTRAIN page — sim-time + session-energy accounting

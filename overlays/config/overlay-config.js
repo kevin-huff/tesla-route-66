@@ -15,8 +15,10 @@
     demoFallbackMs: 2500,
     // Smooth jumpy speed in the readout (the bridge also smooths upstream).
     speedDebounceMs: 600,
-    // How long a transmission stays on screen before it auto-hides (ms). ~1-2 minutes.
-    transmissionDwellMs: 90000,
+    // How long a transmission stays on screen before it auto-hides (ms). Sized to the
+    // ~3 min generation cadence so the card is up most of the drive but still clears
+    // when the car parks and the feed goes quiet.
+    transmissionDwellMs: 150000,
     // Mission Map (map.html) — live basemap + follow-cam tuning.
     map: {
       // OpenFreeMap: free vector tiles + glyphs, no API key. Swap both for a

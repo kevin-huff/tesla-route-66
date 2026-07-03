@@ -62,9 +62,9 @@ test('locate() separates Springfield start from Springfield home via minM', () =
   assert.ok(atStart.offM < 500);
   assert.ok(atStart.distM < 5000, 'start resolves near distance 0');
 
-  // hint past Branson (leg 6) -> the same coords resolve to the END of the loop
-  road.locate(36.673, -93.227, { minM: road.distById.get('sc_branson') - 10000 });
-  const atHome = road.locate(spr.lat, spr.lng, { minM: road.distById.get('sc_branson') });
+  // hint past Lowell (leg 6) -> the same coords resolve to the END of the loop
+  road.locate(36.2554, -94.133, { minM: road.distById.get('sc_lowell') - 10000 });
+  const atHome = road.locate(spr.lat, spr.lng, { minM: road.distById.get('sc_lowell') });
   assert.ok(atHome.offM < 500);
   assert.ok(road.totalM - atHome.distM < 5000, 'home resolves near the loop end');
 });

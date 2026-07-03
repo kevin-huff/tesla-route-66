@@ -21,8 +21,9 @@ export function defaultStore(totalLegs = 6) {
     lastElevationM: null,
     visited: [], // landmark ids (once-per-trip latch)
     trail: [], // breadcrumb [lng,lat] points, thinned + capped (map overlay seed)
-    statesSeen: [], // 2-letter codes
+    statesSeen: [], // 2-letter codes (pg poller: geocoded drive addresses)
     superchargers: 0,
+    fastChargeStops: null, // pg poller: DC fast-charge stops since trip start (null = no PG yet)
     legsDone: 0,
     kwhCharged: 0, // committed charge-session energy (charge_energy_added at unplug)
     driveSecs: 0, // accumulated while state=driving (sim-time in demo)
