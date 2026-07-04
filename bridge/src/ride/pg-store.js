@@ -122,6 +122,28 @@ export async function createPgRideStore({ postgres, schema = 'ride_tracker' }) {
       return r.rows.map(shiftRow);
     },
 
+    async updateShift(id, { startedAt, endedAt } = {}) {
+      const r = await q(
+        `UPDATE ${S}.shifts SET
+           started_at = CASE WHEN $2 THEN $3::timestamptz ELSE started_at END,
+           ended_at   = CASE WHEN $4 THEN $5::timestamptz ELSE ended_at END
+         WHERE id=$1 RETURNING *`,
+        [id, startedAt !== undefined, startedAt ?? null, endedAt !== undefined, endedAt ?? null],
+      );
+      return shiftRow(r.rows[0]);
+    },
+    // hard-delete a shift and everything it owns (FK-safe order)
+    async deleteShift(id) {
+      const exists = await q(`SELECT 1 FROM ${S}.shifts WHERE id=$1`, [id]);
+      if (!exists.rows.length) return null;
+      const tips = await q(`DELETE FROM ${S}.tips WHERE shift_id=$1`, [id]);
+      const idle = await q(`DELETE FROM ${S}.idle_intervals WHERE shift_id=$1`, [id]);
+      await q(`DELETE FROM ${S}.shift_path WHERE shift_id=$1`, [id]);
+      const rides = await q(`DELETE FROM ${S}.rides WHERE shift_id=$1`, [id]);
+      await q(`DELETE FROM ${S}.shifts WHERE id=$1`, [id]);
+      return { shiftId: id, rides: rides.rowCount, tips: tips.rowCount, idleIntervals: idle.rowCount };
+    },
+
     async createRide({ shiftId, startedAt, pickup, source }) {
       const r = await q(
         `INSERT INTO ${S}.rides (shift_id, started_at, pickup_lat, pickup_lng, source)
@@ -145,6 +167,29 @@ export async function createPgRideStore({ postgres, schema = 'ride_tracker' }) {
     async getRide(id) {
       const r = await q(`SELECT * FROM ${S}.rides WHERE id=$1`, [id]);
       return rideRow(r.rows[0]);
+    },
+    async updateRide(id, patch = {}) {
+      const r = await q(
+        `UPDATE ${S}.rides SET
+           fare_cents = CASE WHEN $2 THEN $3::integer ELSE fare_cents END,
+           started_at = CASE WHEN $4 THEN $5::timestamptz ELSE started_at END,
+           ended_at   = CASE WHEN $6 THEN $7::timestamptz ELSE ended_at END
+         WHERE id=$1 RETURNING *`,
+        [
+          id,
+          patch.fareCents !== undefined, patch.fareCents ?? null,
+          patch.startedAt !== undefined, patch.startedAt ?? null,
+          patch.endedAt !== undefined, patch.endedAt ?? null,
+        ],
+      );
+      return rideRow(r.rows[0]);
+    },
+    async deleteRide(id) {
+      const exists = await q(`SELECT 1 FROM ${S}.rides WHERE id=$1`, [id]);
+      if (!exists.rows.length) return null;
+      const tips = await q(`DELETE FROM ${S}.tips WHERE ride_id=$1`, [id]);
+      await q(`DELETE FROM ${S}.rides WHERE id=$1`, [id]);
+      return { rideId: id, tips: tips.rowCount };
     },
     async listRides({ from, to, shiftId } = {}) {
       const r = await q(
@@ -180,6 +225,11 @@ export async function createPgRideStore({ postgres, schema = 'ride_tracker' }) {
         [from ?? null, to ?? null, shiftId ?? null],
       );
       return r.rows.map(tipRow);
+    },
+
+    async deleteTip(id) {
+      const r = await q(`DELETE FROM ${S}.tips WHERE id=$1 RETURNING *`, [id]);
+      return tipRow(r.rows[0]);
     },
 
     async openIdle({ shiftId, startedAt }) {

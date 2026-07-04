@@ -33,6 +33,7 @@
     <button data-mode="route">ROUTE</button>
     <button data-mode="heat">HEAT</button>
     <span class="gap"></span>
+    <button id="btnManage1" class="manageBtn">MANAGE</button>
     <button id="btnToken1" class="tokenBtn">TOKEN</button>
   </div>
 </section>
@@ -81,7 +82,34 @@
     <button data-mode="route">ROUTE</button>
     <button data-mode="heat">HEAT</button>
     <span class="gap"></span>
+    <button id="btnManage2" class="manageBtn">MANAGE</button>
     <button id="btnResend">RESEND CHAT</button>
+  </div>
+</section>
+
+<!-- P·6 manage (basic CRUD — fix fares, remove junk records) -->
+<section class="screen" id="s-manage">
+  <div class="head"><span class="wm">MANAGE</span><span class="hclock num" id="mgHint"></span></div>
+  <div class="label" style="margin-top:18px">TODAY'S RIDES — TAP TO EDIT</div>
+  <div class="ride-list" id="mgRides"></div>
+  <div class="label" style="margin-top:24px">RECENT SHIFTS</div>
+  <div class="ride-list" id="mgShifts"></div>
+  <div class="spacer"></div>
+  <button class="btn ghost" id="btnManageBack" style="margin-top:8px">BACK</button>
+</section>
+
+<!-- P·7 edit ride -->
+<section class="screen" id="s-editride">
+  <div class="head"><span class="wm">EDIT RIDE</span><span class="hclock num" id="erMeta"></span></div>
+  <div class="fare-display num" id="erDisplay">$0.00</div>
+  <div class="keypad" id="erKeypad"></div>
+  <div class="label" style="margin-top:20px" id="erTipsLabel">TIPS</div>
+  <div class="ride-list" id="erTips"></div>
+  <div class="spacer"></div>
+  <button class="btn apply" id="btnApplyFare" disabled>APPLY FARE</button>
+  <div class="btn-row">
+    <button class="btn secondary danger" id="btnDeleteRide">DELETE RIDE</button>
+    <button class="btn secondary" id="btnEditCancel">CANCEL</button>
   </div>
 </section>
 

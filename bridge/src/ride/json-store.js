@@ -86,6 +86,34 @@ export function createJsonRideStore(filePath) {
         .filter((s) => (!from || s.startedAt >= from) && (!to || s.startedAt < to))
         .map((s) => ({ ...s }));
     },
+    async updateShift(id, { startedAt, endedAt } = {}) {
+      const s = byId(doc.shifts, id);
+      if (!s) return null;
+      if (startedAt !== undefined) s.startedAt = startedAt;
+      if (endedAt !== undefined) s.endedAt = endedAt;
+      flush();
+      return { ...s };
+    },
+    // hard-delete a shift and everything it owns (test/junk shifts). Aggregates
+    // recompute from the store, so month/today totals heal on the next rebuild.
+    async deleteShift(id) {
+      const before = {
+        rides: doc.rides.length, tips: doc.tips.length, idle: doc.idle.length,
+      };
+      if (!byId(doc.shifts, id)) return null;
+      doc.shifts = doc.shifts.filter((s) => s.id !== id);
+      doc.rides = doc.rides.filter((r) => r.shiftId !== id);
+      doc.tips = doc.tips.filter((t) => t.shiftId !== id);
+      doc.idle = doc.idle.filter((iv) => iv.shiftId !== id);
+      delete doc.paths[String(id)];
+      flush();
+      return {
+        shiftId: id,
+        rides: before.rides - doc.rides.length,
+        tips: before.tips - doc.tips.length,
+        idleIntervals: before.idle - doc.idle.length,
+      };
+    },
 
     // ---- rides ----
     async createRide({ shiftId, startedAt, pickup, source }) {
@@ -117,6 +145,24 @@ export function createJsonRideStore(filePath) {
       const r = byId(doc.rides, id);
       return r ? { ...r } : null;
     },
+    async updateRide(id, patch = {}) {
+      const r = byId(doc.rides, id);
+      if (!r) return null;
+      for (const k of ['fareCents', 'startedAt', 'endedAt']) {
+        if (patch[k] !== undefined) r[k] = patch[k];
+      }
+      flush();
+      return { ...r };
+    },
+    async deleteRide(id) {
+      const r = byId(doc.rides, id);
+      if (!r) return null;
+      const tipsBefore = doc.tips.length;
+      doc.rides = doc.rides.filter((x) => x.id !== id);
+      doc.tips = doc.tips.filter((t) => t.rideId !== id);
+      flush();
+      return { rideId: id, tips: tipsBefore - doc.tips.length };
+    },
     async listRides({ from, to, shiftId } = {}) {
       return doc.rides
         .filter((r) =>
@@ -143,6 +189,13 @@ export function createJsonRideStore(filePath) {
           (!from || t.createdAt >= from) && (!to || t.createdAt < to) &&
           (shiftId == null || t.shiftId === shiftId))
         .map((t) => ({ ...t }));
+    },
+    async deleteTip(id) {
+      const t = byId(doc.tips, id);
+      if (!t) return null;
+      doc.tips = doc.tips.filter((x) => x.id !== id);
+      flush();
+      return { ...t };
     },
 
     // ---- idle intervals ----

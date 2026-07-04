@@ -12,6 +12,12 @@
 //   POST /api/ride/map/mode             {mode: nav|route|heat}
 //   POST /api/ride/summary/resend
 //   POST /api/ride/seed                 {month, earningsCents|earnings, rides, shiftSeconds}
+//   POST /api/ride/shift/delete         {shiftId} — hard-delete a junk/test shift + its records
+//   POST /api/ride/shift/update         {shiftId, startedAt?, endedAt?}
+//   POST /api/ride/ride/update          {rideId, fareCents|earnings?, startedAt?, endedAt?}
+//   POST /api/ride/ride/delete          {rideId} — removes its tips too
+//   POST /api/ride/tip/delete           {tipId}
+//   GET  /api/ride/shifts               shift history w/ totals (auth; find ids to delete)
 //   GET  /api/ride/stats/today | /stats/month | /stats/chat
 //   GET  /api/ride/rides/today          (?private=1 -> pickup/dropoff coords)
 //   GET  /api/ride/map/route/today      (?private=1 -> unfiltered path)
@@ -23,6 +29,10 @@ const ERROR_STATUS = {
   ride_open: 409,
   bad_fare: 400,
   bad_amount: 400,
+  bad_id: 400,
+  bad_time: 400,
+  shift_open: 409,
+  not_found: 404,
 };
 
 export function createRideRoutes({ tracker, cfg }) {
@@ -83,6 +93,26 @@ export function createRideRoutes({ tracker, cfg }) {
         return true;
       case 'POST /api/ride/seed':
         result(json, res, await tracker.seedMonth(body));
+        return true;
+      case 'POST /api/ride/shift/delete':
+        result(json, res, await tracker.deleteShift(body));
+        return true;
+      case 'POST /api/ride/shift/update':
+        result(json, res, await tracker.editShift(body));
+        return true;
+      case 'POST /api/ride/ride/update':
+        result(json, res, await tracker.editRide(body));
+        return true;
+      case 'POST /api/ride/ride/delete':
+        result(json, res, await tracker.deleteRide(body));
+        return true;
+      case 'POST /api/ride/tip/delete':
+        result(json, res, await tracker.deleteTip(body));
+        return true;
+      case 'GET /api/ride/shifts':
+        // shift history w/ per-shift totals — private surface (find ids to delete)
+        if (!authed(req, url)) { json(res, 401, { ok: false, error: 'unauthorized' }); return true; }
+        json(res, 200, { ok: true, shifts: await tracker.listShiftsView() });
         return true;
 
       case 'GET /api/ride/stats/today': {

@@ -245,6 +245,100 @@ test('resend summary rebroadcasts the last ride/shift summary', async () => {
   tracker.stop();
 });
 
+test('deleteShift: junk shifts vanish and today/month totals heal', async () => {
+  const { tracker, clock, store } = await makeTracker();
+  // real shift
+  await tracker.startShift({});
+  await tracker.startRide({});
+  clock.advance(10 * 60_000);
+  await tracker.endRide({ fareCents: 2000 });
+  await tracker.addTip({ amountCents: 500 });
+  await tracker.endShift({});
+  // junk test shift
+  clock.advance(5 * 60_000);
+  await tracker.startShift({});
+  await tracker.startRide({});
+  clock.advance(3 * 60_000);
+  await tracker.endRide({ fareCents: 9999 });
+  const junkId = (await store.getOpenShift()).id;
+  assert.equal(tracker.stats().today.earningsCents, 2500 + 9999);
+
+  // deleting the OPEN junk shift closes it out and heals the numbers
+  const r = await tracker.deleteShift({ shiftId: junkId });
+  assert.equal(r.ok, true);
+  assert.equal(r.wasOpen, true);
+  assert.equal(r.deleted.rides, 1);
+  const s = tracker.stats();
+  assert.equal(s.shift.status, 'off');
+  assert.equal(s.today.earningsCents, 2500);
+  assert.equal(s.today.rides, 1);
+  assert.equal(s.month.earningsCents, 2500);
+  assert.equal((await store.listRides()).length, 1, 'junk rides gone from the store');
+  assert.equal((await store.listTips()).length, 1);
+
+  // guards
+  assert.equal((await tracker.deleteShift({ shiftId: junkId })).code, 'not_found');
+  assert.equal((await tracker.deleteShift({ shiftId: 'abc' })).code, 'bad_id');
+
+  // shift history view reflects the survivor only
+  const shifts = await tracker.listShiftsView();
+  assert.equal(shifts.length, 1);
+  assert.equal(shifts[0].earningsCents, 2500);
+  assert.equal(shifts[0].rides, 1);
+  assert.equal(shifts[0].open, false);
+  tracker.stop();
+});
+
+test('CRUD: edit fare, delete ride (incl. open), delete tip, edit shift times', async () => {
+  const { tracker, clock, store } = await makeTracker();
+  await tracker.startShift({});
+  await tracker.startRide({});
+  clock.advance(10 * 60_000);
+  const r1 = (await tracker.endRide({ fareCents: 2000 })).ride;
+  await tracker.addTip({ amountCents: 500, rideId: r1.id });
+
+  // edit fare — totals + ticker heal
+  const edit = await tracker.editRide({ rideId: r1.id, earnings: '25.00' });
+  assert.equal(edit.ok, true);
+  assert.equal(edit.ride.fareCents, 2500);
+  assert.equal(tracker.stats().today.earningsCents, 3000);
+  assert.equal(tracker.ticker()[0].fareCents, 2500);
+
+  // validation guards
+  assert.equal((await tracker.editRide({ rideId: r1.id, earnings: 'junk' })).code, 'bad_fare');
+  assert.equal((await tracker.editRide({ rideId: r1.id, endedAt: 'not-a-date' })).code, 'bad_time');
+  assert.equal((await tracker.editRide({ rideId: 999 })).code, 'not_found');
+
+  // delete the tip
+  const tipId = tracker.ridesTodayList(true)[0].tips[0].id;
+  assert.equal((await tracker.deleteTip({ tipId })).ok, true);
+  assert.equal(tracker.stats().today.earningsCents, 2500);
+  assert.equal((await tracker.deleteTip({ tipId })).code, 'not_found');
+
+  // delete an OPEN ride — cancels it and falls back to idling
+  clock.advance(60_000);
+  const r2 = (await tracker.startRide({})).ride;
+  clock.advance(60_000);
+  const del = await tracker.deleteRide({ rideId: r2.id });
+  assert.equal(del.ok, true);
+  assert.equal(del.wasOpen, true);
+  const s = tracker.stats();
+  assert.equal(s.ride, null);
+  assert.ok(s.idleStartedAt, 'idle reopens after cancelling the ride');
+  assert.equal(s.today.rides, 1);
+
+  // edit shift times (closed shifts only for endedAt)
+  assert.equal((await tracker.editShift({ shiftId: 1, endedAt: new Date().toISOString() })).code, 'shift_open');
+  await tracker.endShift({});
+  const newStart = new Date(clock.now() - 3600_000).toISOString();
+  const es = await tracker.editShift({ shiftId: 1, startedAt: newStart });
+  assert.equal(es.ok, true);
+  assert.equal((await store.listShifts())[0].startedAt, newStart);
+  assert.equal(tracker.stats().month.shiftSec, 3600, 'month hours follow the edited times');
+  assert.equal((await tracker.editShift({ shiftId: 1, endedAt: '2020-01-01T00:00:00Z' })).code, 'bad_time');
+  tracker.stop();
+});
+
 test('normalizeCents + formatters', () => {
   assert.equal(normalizeCents(1247, undefined), 1247);
   assert.equal(normalizeCents(undefined, '14.75'), 1475);

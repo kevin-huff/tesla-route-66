@@ -304,7 +304,7 @@ npm run demo:night     # city ride/idle simulation — full suite animates, no c
 |---|---|---|
 | LIVE | `/night-drive/rail.html?embed` | lower-third rail + ticker chips + map dock + event cards |
 | DATA | `/night-drive/data.html?embed` | full-screen stats; put the camera source UNDER it (the 1060×596 panel is a transparent hole) |
-| RECAP | `/night-drive/recap.html?embed` | hidden until `shift_ended`; safe to keep loaded |
+| RECAP | `/night-drive/recap.html?embed` | hidden until `shift_ended`, auto-hides after ~3 min (`?dwell=<sec>` tunes it; `?hold` pins it until the next shift — use in a dedicated RECAP scene) |
 
 Rail params: `?collapse` hides the totals tier. Every page falls back to a canned client-side sim when no bridge is reachable, so files render standalone.
 
@@ -326,6 +326,12 @@ POST /api/ride/tip {amountCents | amount, rideId?}      # no rideId -> most rece
 POST /api/ride/map/mode {mode: nav|route|heat}          # force the overlay map view
 POST /api/ride/summary/resend                           # re-post last ride/shift summary to chat
 POST /api/ride/seed {month, earnings, rides, shiftSeconds}   # one-time migration (below)
+POST /api/ride/shift/delete {shiftId}                        # hard-delete a junk/test shift + its rides/tips/idle/path
+POST /api/ride/shift/update {shiftId, startedAt?, endedAt?}  # fix shift times (closed shifts)
+POST /api/ride/ride/update {rideId, fareCents|earnings?, startedAt?, endedAt?}
+POST /api/ride/ride/delete {rideId}                          # removes its tips too; cancels an open ride
+POST /api/ride/tip/delete {tipId}
+GET  /api/ride/shifts                                        # shift history w/ totals (auth) — find ids to delete
 GET  /api/ride/stats/today | /stats/month | /stats/chat | /rides/today
 GET  /api/ride/map/route/today | /api/ride/map/heat?binM&from&to&dow&hour
 ```
@@ -361,9 +367,16 @@ Month stats = seed + tracked rides from then on, to the cent; seed is zero for l
 
 ### PWA dashboard (`/night-drive/dash/`)
 
-Installable, dark, one-handed: start/end shift, start/end ride with a cents-exact fare keypad (`1 2 4 7` → `$12.47`), tip attribution to any of today's rides, live stats, map-mode override, resend-chat. Mutations go through a **persistent retry queue** with idempotency keys — flaky cellular or an app kill can't lose or double-log a ride. The ride list shows pickup→dropoff coordinates (private surface only). Set the token once via the TOKEN button (stored on-device).
+Installable, dark, one-handed: start/end shift, start/end ride with a cents-exact fare keypad (`1 2 4 7` → `$12.47`), tip attribution to any of today's rides, live stats, map-mode override, resend-chat, and a **MANAGE** screen for basic CRUD — tap a ride to fix its fare, remove a tip, or delete it; delete junk shifts from the history list. Totals recompute instantly and the overlays repaint. Mutations go through a **persistent retry queue** with idempotency keys — flaky cellular or an app kill can't lose or double-log a ride. The ride list shows pickup→dropoff coordinates (private surface only). Set the token once via the TOKEN button (stored on-device).
 
-**Remote access (the phone in the car is not on the LAN): use Tailscale.** Install tailscaled on Unraid and Tailscale on the phone, then install the PWA from `http://<tailscale-ip>:8787/night-drive/dash/`. No ports exposed, WireGuard-encrypted, and the bearer token stays as a second factor. (A Cloudflare Tunnel + Access works too if you ever need viewer-facing pages remote, but don't put the PWA on the public internet.)
+**Remote access (the phone in the car is not on the LAN): use Tailscale.** Install tailscaled on Unraid and Tailscale on the phone. Then serve the bridge over Tailscale HTTPS so the phone gets a **secure context** (full PWA install, service worker, faster repeat loads):
+
+```bash
+tailscale serve --bg https / http://localhost:8787
+# -> https://<node>.<tailnet>.ts.net/night-drive/dash/
+```
+
+Plain `http://<tailscale-ip>:8787/night-drive/dash/` also works (the dashboard tolerates insecure contexts), but it can't install as a real PWA. Either way: no ports exposed, WireGuard-encrypted, bearer token as a second factor. (A Cloudflare Tunnel + Access works too if you ever need viewer-facing pages remote, but don't put the PWA on the public internet.)
 
 ### Heat map
 

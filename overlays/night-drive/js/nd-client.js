@@ -48,14 +48,20 @@
   }
   const serverNow = () => Date.now() + serverOffsetMs;
 
-  function markTelemetry() {
+  // Liveness = ANY hub traffic (the hub heartbeats `ping` every 10s), NOT
+  // telemetry cadence: live MQTT only publishes on change, so a parked car can
+  // legitimately go minutes between telemetry frames. Data holds, socket lives,
+  // overlay stays LIVE; only a genuinely dead socket reads RECONNECTING.
+  function markAlive() {
     lastTelemetryAt = Date.now();
     if (staleFlag) { staleFlag = false; dispatch('stale', { stale: false }); }
   }
+  function markDead() {
+    if (!staleFlag) { staleFlag = true; dispatch('stale', { stale: true }); }
+  }
   setInterval(() => {
     if (!lastTelemetryAt || demoStop) return;
-    const stale = Date.now() - lastTelemetryAt > (cfg.staleMs || 5000);
-    if (stale !== staleFlag) { staleFlag = stale; dispatch('stale', { stale }); }
+    if (Date.now() - lastTelemetryAt > (cfg.staleMs || 25000)) markDead();
   }, 1000);
 
   const RIDE_EVENTS = new Set([
@@ -64,6 +70,7 @@
   ]);
 
   function handleMessage(msg) {
+    markAlive(); // every hub message counts, including the 10s ping heartbeat
     if (msg.type === 'snapshot') {
       const d = msg.data || {};
       if (d.ride) {
@@ -71,14 +78,12 @@
         dispatch('ride', d.ride);
       }
       if (d.telemetry && d.telemetry.state !== 'offline') {
-        markTelemetry();
         dispatch('telemetry', d.telemetry);
       }
       dispatch('status', { connected: true, mode: d.mode });
       return;
     }
     if (msg.type === 'ping') return;
-    if (msg.type === 'telemetry') markTelemetry();
     if (RIDE_EVENTS.has(msg.type)) syncClock(msg.data?.stats?.serverNow || msg.data?.serverNow);
     dispatch(msg.type, msg.data);
   }
@@ -111,7 +116,11 @@
       try { m = JSON.parse(ev.data); } catch { return; }
       handleMessage(m);
     };
-    ws.onclose = () => { dispatch('status', { connected: false }); scheduleReconnect(); };
+    ws.onclose = () => {
+      dispatch('status', { connected: false });
+      if (lastTelemetryAt && !demoStop) markDead(); // dead socket -> RECONNECTING immediately
+      scheduleReconnect();
+    };
     ws.onerror = () => { try { ws.close(); } catch (e) {} };
     armDemoFallback();
   }

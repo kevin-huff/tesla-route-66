@@ -40,9 +40,19 @@
   const saveQ = (q) => localStorage.setItem(Q_KEY, JSON.stringify(q));
   let flushing = false;
 
+  // crypto.randomUUID only exists in secure contexts (https / localhost) — a
+  // plain-http Tailscale IP is NOT one, and the very first tap would throw.
+  const uuid = () =>
+    crypto.randomUUID
+      ? crypto.randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+
   function enqueue(path, body) {
     const q = loadQ();
-    q.push({ path, body: { ...body, idempotencyKey: crypto.randomUUID(), source: 'pwa' }, at: Date.now() });
+    q.push({ path, body: { ...body, idempotencyKey: uuid(), source: 'pwa' }, at: Date.now() });
     saveQ(q);
     updateQBadge();
     flush();
@@ -102,9 +112,11 @@
   function render() {
     if (!stats) return;
     const live = stats.shift.status === 'live';
-    // don't yank the user off an entry screen mid-typing
+    // don't yank the user off an entry/manage screen mid-task
     const cur = currentScreen();
-    if (!['s-fare', 's-tip', 's-summary'].includes(cur)) screen(live ? 's-home' : 's-pre');
+    if (!['s-fare', 's-tip', 's-summary', 's-manage', 's-editride'].includes(cur)) {
+      screen(live ? 's-home' : 's-pre');
+    }
 
     // P5
     $('preNow').textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -216,7 +228,8 @@
       });
       container.appendChild(b);
     }
-    return { reset() { cents = 0; display.textContent = usd(0); onChange(0); } };
+    const set = (c) => { cents = Math.min(Math.max(0, Math.round(c || 0)), 99999); display.textContent = usd(cents); onChange(cents); };
+    return { reset: () => set(0), set };
   }
   let fareCents = 0;
   const farePad = keypad($('fareKeypad'), $('fareDisplay'), (c) => {
@@ -324,6 +337,116 @@
     toast(r?.ok ? 'RECAP SENT TO CHAT' : 'RESEND FAILED', !r?.ok);
   });
   $('btnCloseShift').addEventListener('click', () => { screen('s-pre'); sync(); });
+
+  // ---- MANAGE (basic CRUD: fix fares, remove junk rides/tips/shifts) ----
+  let editRide = null;
+  let editFareCents = 0;
+  const erPad = keypad($('erKeypad'), $('erDisplay'), (c) => {
+    editFareCents = c;
+    $('btnApplyFare').disabled = !editRide || c === editRide.fareCents;
+  });
+
+  const authHdr = () => ({ 'content-type': 'application/json', authorization: `Bearer ${token()}` });
+
+  async function openManage() {
+    screen('s-manage');
+    $('mgHint').textContent = '';
+    try {
+      const [r, s] = await Promise.all([
+        fetch(`${API}/api/ride/rides/today?private=1`, { headers: authHdr() }).then((x) => x.json()),
+        fetch(`${API}/api/ride/shifts`, { headers: authHdr() }).then((x) => x.json()),
+      ]);
+      renderManage(r.rides || [], (s.shifts || []).slice(-6).reverse());
+    } catch {
+      $('mgHint').textContent = 'OFFLINE';
+    }
+  }
+
+  function renderManage(todayRides, shifts) {
+    const rl = $('mgRides');
+    rl.textContent = '';
+    const done = todayRides.filter((r) => r.endedAt).reverse();
+    if (!done.length) rl.innerHTML = '<div class="mg-empty">NO RIDES TODAY</div>';
+    for (const r of done) {
+      const row = document.createElement('div');
+      row.className = 'mg-row';
+      row.innerHTML =
+        `<span><span class="main">RIDE #${r.n} · ${mss(r.durSec)}</span><div class="sub">${loc(r)}</div></span>` +
+        `<span class="amt">${usd(r.fareCents)}${r.tipCents ? ' +' + usd(r.tipCents) : ''}</span>` +
+        `<span></span>`;
+      row.addEventListener('click', () => openEditRide(r));
+      rl.appendChild(row);
+    }
+
+    const sl = $('mgShifts');
+    sl.textContent = '';
+    if (!shifts.length) sl.innerHTML = '<div class="mg-empty">NO SHIFTS YET</div>';
+    for (const s of shifts) {
+      const row = document.createElement('div');
+      row.className = 'mg-row';
+      const day = new Date(s.startedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      row.innerHTML =
+        `<span><span class="main">#${s.id} · ${day}${s.open ? ' · LIVE' : ''}</span>` +
+        `<div class="sub">${hmm(s.shiftSec)} · ${s.rides} rides</div></span>` +
+        `<span class="amt">${usd(s.earningsCents)}</span>`;
+      const x = document.createElement('button');
+      x.className = 'xbtn';
+      x.textContent = '✕';
+      x.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete shift #${s.id} (${s.rides} rides, ${usd(s.earningsCents)})? This can't be undone.`)) return;
+        enqueue('/api/ride/shift/delete', { shiftId: s.id });
+        toast(`SHIFT #${s.id} DELETED`);
+        setTimeout(openManage, 800);
+      });
+      row.appendChild(x);
+      sl.appendChild(row);
+    }
+  }
+
+  function openEditRide(r) {
+    editRide = r;
+    $('erMeta').textContent = `RIDE #${r.n} · ${mss(r.durSec)}`;
+    erPad.set(r.fareCents);
+    $('btnApplyFare').disabled = true;
+    const tl = $('erTips');
+    tl.textContent = '';
+    $('erTipsLabel').style.display = (r.tips || []).length ? '' : 'none';
+    for (const t of r.tips || []) {
+      const row = document.createElement('div');
+      row.className = 'mg-row';
+      row.innerHTML = `<span class="main">TIP</span><span class="amt">+${usd(t.amountCents)}</span>`;
+      const x = document.createElement('button');
+      x.className = 'xbtn';
+      x.textContent = '✕';
+      x.addEventListener('click', () => {
+        if (!confirm(`Remove ${usd(t.amountCents)} tip?`)) return;
+        enqueue('/api/ride/tip/delete', { tipId: t.id });
+        toast('TIP REMOVED');
+        setTimeout(openManage, 800);
+      });
+      row.appendChild(x);
+      tl.appendChild(row);
+    }
+    screen('s-editride');
+  }
+
+  $('btnApplyFare').addEventListener('click', () => {
+    if (!editRide) return;
+    enqueue('/api/ride/ride/update', { rideId: editRide.id, fareCents: editFareCents });
+    toast(`FARE → ${usd(editFareCents)}`);
+    setTimeout(openManage, 800);
+  });
+  $('btnDeleteRide').addEventListener('click', () => {
+    if (!editRide) return;
+    if (!confirm(`Delete ride #${editRide.n} (${usd(editRide.fareCents)})? Its tips go too.`)) return;
+    enqueue('/api/ride/ride/delete', { rideId: editRide.id });
+    toast(`RIDE #${editRide.n} DELETED`);
+    setTimeout(openManage, 800);
+  });
+  $('btnEditCancel').addEventListener('click', openManage);
+  $('btnManageBack').addEventListener('click', () => { screen(stats?.shift?.status === 'live' ? 's-home' : 's-pre'); sync(); });
+  document.querySelectorAll('.manageBtn').forEach((b) => b.addEventListener('click', openManage));
 
   // map mode override + resend
   document.querySelectorAll('[data-mode]').forEach((b) => {

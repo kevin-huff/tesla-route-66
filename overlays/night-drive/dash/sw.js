@@ -1,7 +1,7 @@
 // Night Drive PWA service worker — cache the shell so the dashboard opens
 // instantly in the car even on garbage cellular. API calls always go to the
 // network (the retry queue in app.js owns offline mutations).
-const VERSION = 'nd-v1';
+const VERSION = 'nd-v3';
 const SHELL = [
   './',
   'index.html',

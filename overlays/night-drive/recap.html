@@ -127,6 +127,13 @@
   thumb.style.cssText = 'width:340px;height:340px;';
   ND_MAP.attach(thumb, ND, { staticMode: 'route', rotate: false, modes: ['route'] });
 
+  // dwell: auto-hide unless ?hold pins the card (dedicated RECAP scene). The
+  // same window guards snapshot replays so yesterday's recap can't pop up when
+  // OBS reloads the source pre-stream.
+  const dwellMs = Number(ND.params.get('dwell')) * 1000 || ND.config.recapDwellMs || 180000;
+  const hold = ND.params.has('hold');
+  let hideTimer = null;
+
   function show(summary) {
     $('meta').textContent = `${summary.dateText || ''} · ${fmt.hmmss(summary.shiftSec)}`;
     $('earn').textContent = fmt.usd(summary.earningsCents);
@@ -141,14 +148,23 @@
       $('bests').innerHTML = `BESTS — <b>${fmt.usd(summary.bests.hourCents)}/HR · ${fmt.usd(summary.bests.dayCents)} DAY</b>`;
     }
     document.body.classList.add('show');
+    clearTimeout(hideTimer);
+    if (!hold) hideTimer = setTimeout(hide, dwellMs);
+  }
+  function hide() {
+    clearTimeout(hideTimer);
+    document.body.classList.remove('show');
   }
 
   ND.on('shift_ended', (d) => { if (d.summary) show(d.summary); });
-  // late join: bridge snapshot carries the last recap while the shift is still off
+  // late join: the snapshot carries the last recap — re-show it only while it
+  // would still be on screen (shift off AND ended within the dwell window)
   ND.on('ride', (d) => {
-    if (d.lastSummary && d.stats?.shift?.status !== 'live') show(d.lastSummary);
+    if (!d.lastSummary || d.stats?.shift?.status === 'live') return;
+    const age = Date.now() - Date.parse(d.lastSummary.endedAt || 0);
+    if (hold || age < dwellMs) show(d.lastSummary);
   });
-  ND.on('shift_started', () => document.body.classList.remove('show'));
+  ND.on('shift_started', hide);
 })();
 </script>
 </body>

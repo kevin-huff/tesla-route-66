@@ -220,6 +220,9 @@ export async function createRideTracker({ cfg, store, now = () => Date.now() }) 
         ? {
             pickup: r.pickupLat != null ? { lat: r.pickupLat, lng: r.pickupLng } : null,
             dropoff: r.dropoffLat != null ? { lat: r.dropoffLat, lng: r.dropoffLng } : null,
+            tips: tipsToday
+              .filter((t) => t.rideId === r.id)
+              .map((t) => ({ id: t.id, amountCents: t.amountCents })),
           }
         : {}),
     }));
@@ -493,6 +496,144 @@ export async function createRideTracker({ cfg, store, now = () => Date.now() }) 
     return { ok: true, type: lastSummary.type, chatText: lastSummary.payload.chatText };
   }
 
+  const parseIso = (v) => {
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? new Date(t).toISOString() : null;
+  };
+
+  // admin/PWA CRUD: fix a fat-fingered fare, adjust timestamps, remove records.
+  // Every edit rebuilds the caches from the store so today/month totals heal,
+  // then emits a stats_tick so overlays repaint immediately.
+
+  async function editRide({ rideId, fareCents, earnings, startedAt, endedAt } = {}) {
+    const id = Number(rideId);
+    const ride = Number.isInteger(id) ? await store.getRide(id) : null;
+    if (!ride) return { ok: false, code: 'not_found', error: `ride ${rideId} not found` };
+    const patch = {};
+    if (fareCents !== undefined || earnings !== undefined) {
+      const cents = normalizeCents(fareCents, earnings);
+      if (cents == null || cents < 0 || cents > 99999) {
+        return { ok: false, code: 'bad_fare', error: 'fare must be 0.00 - 999.99' };
+      }
+      patch.fareCents = cents;
+    }
+    if (startedAt !== undefined) {
+      const t = parseIso(startedAt);
+      if (!t) return { ok: false, code: 'bad_time', error: 'startedAt must be an ISO timestamp' };
+      patch.startedAt = t;
+    }
+    if (endedAt !== undefined) {
+      if (!ride.endedAt) return { ok: false, code: 'ride_open', error: 'ride is still open — end it first' };
+      const t = parseIso(endedAt);
+      if (!t) return { ok: false, code: 'bad_time', error: 'endedAt must be an ISO timestamp' };
+      patch.endedAt = t;
+    }
+    const s0 = patch.startedAt ?? ride.startedAt;
+    const e0 = patch.endedAt ?? ride.endedAt;
+    if (e0 && Date.parse(e0) < Date.parse(s0)) {
+      return { ok: false, code: 'bad_time', error: 'endedAt is before startedAt' };
+    }
+    const updated = await store.updateRide(id, patch);
+    await rebuildCaches();
+    emitStats();
+    return { ok: true, ride: updated, stats: stats() };
+  }
+
+  async function deleteRide({ rideId } = {}) {
+    const id = Number(rideId);
+    if (!Number.isInteger(id)) return { ok: false, code: 'bad_id', error: 'rideId must be an integer' };
+    const wasOpen = openRide?.id === id;
+    const deleted = await store.deleteRide(id);
+    if (!deleted) return { ok: false, code: 'not_found', error: `ride ${id} not found` };
+    if (wasOpen && openShift) {
+      // cancelling the in-progress ride: fall back to idling, like it never started
+      const iv = await store.openIdle({ shiftId: openShift.id, startedAt: nowIso() });
+      openIdleStartedAt = iv.startedAt;
+      openRide = null;
+    }
+    await rebuildCaches();
+    emitStats();
+    return { ok: true, deleted, wasOpen, stats: stats() };
+  }
+
+  async function deleteTip({ tipId } = {}) {
+    const id = Number(tipId);
+    if (!Number.isInteger(id)) return { ok: false, code: 'bad_id', error: 'tipId must be an integer' };
+    const deleted = await store.deleteTip(id);
+    if (!deleted) return { ok: false, code: 'not_found', error: `tip ${id} not found` };
+    await rebuildCaches();
+    emitStats();
+    return { ok: true, deleted, stats: stats() };
+  }
+
+  async function editShift({ shiftId, startedAt, endedAt } = {}) {
+    const id = Number(shiftId);
+    const shifts = await store.listShifts();
+    const shift = shifts.find((s) => s.id === id);
+    if (!shift) return { ok: false, code: 'not_found', error: `shift ${shiftId} not found` };
+    const patch = {};
+    if (startedAt !== undefined) {
+      const t = parseIso(startedAt);
+      if (!t) return { ok: false, code: 'bad_time', error: 'startedAt must be an ISO timestamp' };
+      patch.startedAt = t;
+    }
+    if (endedAt !== undefined) {
+      if (!shift.endedAt) return { ok: false, code: 'shift_open', error: 'shift is still open — !end_shift first' };
+      const t = parseIso(endedAt);
+      if (!t) return { ok: false, code: 'bad_time', error: 'endedAt must be an ISO timestamp' };
+      patch.endedAt = t;
+    }
+    const s0 = patch.startedAt ?? shift.startedAt;
+    const e0 = patch.endedAt ?? shift.endedAt;
+    if (e0 && Date.parse(e0) < Date.parse(s0)) {
+      return { ok: false, code: 'bad_time', error: 'endedAt is before startedAt' };
+    }
+    const updated = await store.updateShift(id, patch);
+    await rebuildCaches();
+    emitStats();
+    return { ok: true, shift: updated, stats: stats() };
+  }
+
+  // admin: hard-delete a shift (and its rides/tips/idle/path) — the escape hatch
+  // for junk test shifts. Deleting the OPEN shift is allowed and closes it out;
+  // all caches rebuild from the store so today/month totals heal immediately.
+  async function deleteShift({ shiftId } = {}) {
+    const id = Number(shiftId);
+    if (!Number.isInteger(id)) return { ok: false, code: 'bad_id', error: 'shiftId must be an integer' };
+    const wasOpen = openShift?.id === id;
+    const deleted = await store.deleteShift(id);
+    if (!deleted) return { ok: false, code: 'not_found', error: `shift ${id} not found` };
+    if (wasOpen) {
+      openShift = null;
+      openRide = null;
+      openIdleStartedAt = null;
+      stopStatsTicker();
+    }
+    await rebuildCaches();
+    emitStats();
+    return { ok: true, deleted, wasOpen, stats: stats() };
+  }
+
+  // admin/PWA: per-shift history with aggregates (private surface)
+  async function listShiftsView() {
+    const [shifts, rides, tips] = await Promise.all([
+      store.listShifts(), store.listRides(), store.listTips(),
+    ]);
+    return shifts.map((s) => {
+      const sr = rides.filter((r) => r.shiftId === s.id && r.endedAt);
+      const st = tips.filter((t) => t.shiftId === s.id);
+      const end = s.endedAt ? new Date(s.endedAt) : new Date(now());
+      return {
+        id: s.id, startedAt: s.startedAt, endedAt: s.endedAt, notes: s.notes,
+        open: !s.endedAt,
+        shiftSec: Math.max(0, Math.round((end - new Date(s.startedAt)) / 1000)),
+        rides: sr.length,
+        earningsCents:
+          sr.reduce((a, r) => a + r.fareCents, 0) + st.reduce((a, t) => a + t.amountCents, 0),
+      };
+    });
+  }
+
   async function seedMonth({ month, earningsCents, earnings, rides = 0, shiftSeconds = 0 } = {}) {
     const m = month || monthKey(now());
     if (!/^\d{4}-\d{2}$/.test(m)) return { ok: false, error: 'month must be YYYY-MM' };
@@ -641,6 +782,7 @@ export async function createRideTracker({ cfg, store, now = () => Date.now() }) 
     setBroadcast: (fn) => { broadcast = fn; },
     onTelemetry,
     startShift, endShift, startRide, endRide, addTip,
+    editRide, deleteRide, deleteTip, editShift, deleteShift, listShiftsView,
     setMapMode, resendSummary, seedMonth,
     stats, chatStats, ticker, ridesTodayList, routeToday, heat,
     publicSnapshot, publicPosition,

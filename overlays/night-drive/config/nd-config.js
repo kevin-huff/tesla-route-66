@@ -10,8 +10,10 @@
     reconnectBaseMs: 500,
     reconnectMaxMs: 10000,
     demoFallbackMs: 2500,
-    // >5s without telemetry = RECONNECTING · DATA HELD (quiet, not an error)
-    staleMs: 5000,
+    // >25s without ANY hub traffic = RECONNECTING · DATA HELD. The hub pings
+    // every 10s, so this means two missed heartbeats — a genuinely dead socket,
+    // not just a parked car whose MQTT has nothing new to say.
+    staleMs: 25000,
     // map module
     map: {
       rotateMs: 8000, // NAV -> ROUTE -> HEAT crossfade cadence
@@ -24,5 +26,9 @@
     },
     // event cards
     eventHoldMs: 6000,
+    // recap card auto-hides after this dwell (also the freshness window for
+    // re-showing it to a late-joining/reloaded source). ?hold pins it until the
+    // next shift starts — use that when recap.html is its own OBS scene.
+    recapDwellMs: 180000,
   };
 })();
