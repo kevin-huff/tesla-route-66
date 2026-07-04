@@ -338,7 +338,7 @@ Configure `ride.privacy {lat, lng, radiusM}`. Enforced **server-side at every pa
 
 ### Streamerbot rewire
 
-Keep six command actions, each one **HTTP Request** sub-action (POST, header `Authorization: Bearer <token>`):
+**Ready-made kit in [`streamerbot/`](streamerbot/)** — two paste-in C# actions (command router + WS chat relay) and a click-by-click setup/parity guide. Summary of what it wires up:
 
 | Command | Request |
 |---|---|
